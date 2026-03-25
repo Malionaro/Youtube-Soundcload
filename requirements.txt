@@ -1,0 +1,7 @@
+yt-dlp
+Pillow
+filetype
+customtkinter
+requests
+packaging
+pywin32; platform_system == "Windows"
