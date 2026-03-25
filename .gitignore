@@ -164,3 +164,8 @@ ffmpeg/
 *.zip
 MIGRATION_SUMMARY.md
 build_output/
+soundsync-tauri/node_modules/
+soundsync-tauri/dist/
+soundsync-tauri/dist-ssr/
+soundsync-tauri/src-tauri/target/
+soundsync-tauri/src-tauri/gen/
