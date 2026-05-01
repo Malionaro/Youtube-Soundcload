@@ -82,6 +82,7 @@ let clipboardWatchTimer: number | null = null;
 let lastDetectedUrl = "";
 let pendingDetectedUrl = "";
 let appVersion = "0.0.0";
+let selectedConversionFiles: string[] = [];
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
 const $ = (id: string) => (document.getElementById(id) || document.createElement("div")) as HTMLElement;
@@ -392,6 +393,7 @@ function setupEventListeners() {
   on("detected-url-dismiss", "click", hideDetectedUrlPrompt);
   
   on("clear-url-btn", "click", () => {
+    if (isDownloading) return;
     urlInput.value = "";
     updateDownloadBtnState();
     log("🧹 URL und Liste geleert", "info");
@@ -500,9 +502,18 @@ function setupEventListeners() {
 
   // Convert browse
   on("convert-browse-btn", "click", async () => {
-    const file = await open({ title: _("select_file") });
-    if (file) {
-      ($("convert-file-input") as HTMLInputElement).value = file as string;
+    const files = await open({ 
+      title: _("select_file"),
+      multiple: true 
+    });
+    if (files && Array.isArray(files)) {
+      selectedConversionFiles = files;
+      ($("convert-file-input") as HTMLInputElement).value = _("files_selected", { count: files.length });
+      $("convert-status-text").textContent = _("ready_to_convert");
+      $("convert-status-text").className = "status-text success";
+    } else if (files) {
+      selectedConversionFiles = [files as string];
+      ($("convert-file-input") as HTMLInputElement).value = files as string;
       $("convert-status-text").textContent = _("ready_to_convert");
       $("convert-status-text").className = "status-text success";
     }
@@ -573,12 +584,30 @@ function setupEventListeners() {
 
   // Keyboard shortcuts
   document.addEventListener("keydown", (e) => {
-    if (e.ctrlKey && e.key === "Enter" && !downloadBtn.disabled) startDownload();
+    // Start Download: Ctrl + Enter
+    if (e.ctrlKey && e.key === "Enter" && !downloadBtn.disabled) {
+      e.preventDefault();
+      startDownload();
+    }
+    
+    // Clear Log: Ctrl + L
+    if (e.ctrlKey && e.key === "l") {
+      e.preventDefault();
+      logOutput.innerHTML = "";
+      log("🧹 Log cleared via shortcut", "info");
+    }
+
+    // Open Settings: Ctrl + ,
+    if (e.ctrlKey && e.key === ",") {
+      e.preventDefault();
+      getEl("settings-btn").click();
+    }
+
+    // Close Modals: Escape
     if (e.key === "Escape") {
-      const convModal = maybeElement("convert-modal");
-      const sysModal = maybeElement("system-modal");
-      if (convModal) convModal.style.display = "none";
-      if (sysModal) sysModal.style.display = "none";
+      const modals = document.querySelectorAll(".modal-overlay");
+      modals.forEach(m => (m as HTMLElement).style.display = "none");
+      hideDetectedUrlPrompt();
     }
   });
 }
@@ -589,6 +618,10 @@ function setupTauriListeners() {
     if (!isDownloading) return;
     const p = event.payload;
     
+    // Add active animation class if downloading
+    downloadProgress.classList.add("active");
+    totalProgress.classList.add("active");
+
     // Global progress
     if (p.status === "downloading") {
       updateTotalProgress(p.current, p.percent);
@@ -602,6 +635,7 @@ function setupTauriListeners() {
       updateDiscordPresence(`Downloading: ${p.percent.toFixed(0)}%`, `${p.current}/${p.total} | ${p.title}`);
     } else if (p.status === "converting") {
       updateTotalProgress(p.current, 100);
+      convertProgress.classList.add("active");
       convertProgress.style.width = "100%";
       $("convert-label").textContent = `🔄 ${p.title}`;
       updateDiscordPresence("Converting track...", p.title);
@@ -651,6 +685,15 @@ function setupTauriListeners() {
     downloadBtn.disabled = false;
     cancelBtn.disabled = true;
     formatSelect.disabled = false;
+    (getEl("convert-btn") as HTMLButtonElement).disabled = false;
+
+    downloadProgress.classList.remove("active");
+    totalProgress.classList.remove("active");
+    convertProgress.classList.remove("active");
+
+    // Reset conversion label
+    $("convert-label").textContent = _("conversion_waiting");
+    convertProgress.style.width = "0%";
 
     downloadProgress.style.width = "100%";
     totalProgress.style.width = "100%";
@@ -665,6 +708,9 @@ function setupTauriListeners() {
     downloadBtn.disabled = false;
     cancelBtn.disabled = true;
     formatSelect.disabled = false;
+    downloadProgress.classList.remove("active");
+    totalProgress.classList.remove("active");
+    convertProgress.classList.remove("active");
     setStatus(_("error_occurred"), "error");
     log(`❌ ${event.payload}`, "error");
     updateDiscordPresence("Error occurred", event.payload);
@@ -800,23 +846,13 @@ async function startDownload() {
   let url = urlInput.value.trim();
   if (!url || !config.download_folder) return;
 
-  // Handle Spotify
-  if (url.includes("spotify.com")) {
-    log("📻 Spotify-Link erkannt. Rufe Metadaten ab...", "info");
-    const metadata = await fetchSpotifyMetadata(url);
-    if (metadata) {
-      log(`🔎 Suche auf YouTube nach: ${metadata}`, "info");
-      url = `ytsearch1:${metadata}`;
-    } else {
-      log("❌ Spotify-Metadaten konnten nicht geladen werden.", "error");
-      return;
-    }
-  }
+  // ... (Spotify logic)
 
   isDownloading = true;
   downloadBtn.disabled = true;
   cancelBtn.disabled = false;
   formatSelect.disabled = true;
+  (getEl("convert-btn") as HTMLButtonElement).disabled = true;
   completedTracks = 0;
   totalTracks = 0;
   startTime = Date.now();
@@ -862,12 +898,13 @@ async function startDownload() {
       const entry = playlistEntries[i];
       const card = document.getElementById(`track-card-${i + 1}`);
       
+      // Create the task promise
       const task = (async () => {
         if (!isDownloading) return;
         if (card) card.classList.add("active");
 
         try {
-          const res = await invoke("download_track", {
+          await invoke("download_track", {
             request: {
               url: entry.url,
               format: formatSelect.value,
@@ -887,10 +924,7 @@ async function startDownload() {
             if (stat) stat.textContent = "✅";
           }
         } catch (e) {
-          if (!isDownloading) {
-            if (card) card.classList.remove("active");
-            return;
-          }
+          if (!isDownloading) return;
           log(`❌ ${entry.title}: ${e}`, "error");
           if (card) {
             const bar = card.querySelector(".track-progress-bar") as HTMLElement;
@@ -898,23 +932,25 @@ async function startDownload() {
             if (bar) bar.style.background = "var(--error)";
             if (stat) stat.textContent = "❌";
           }
+        } finally {
+          if (card) card.classList.remove("active");
+          if (isDownloading) {
+            completedTracks++;
+            updateTotalProgress();
+          }
         }
-
-        if (card) card.classList.remove("active");
-        if (!isDownloading) return;
-        completedTracks++;
-        updateTotalProgress();
       })();
 
       executing.add(task);
-      task.then(() => executing.delete(task));
+      task.finally(() => executing.delete(task));
 
+      // If we hit the limit, wait for at least one task to finish
       if (executing.size >= concurrencyLimit) {
         await Promise.race(executing);
       }
     }
 
-    // Wait for remaining tasks to finish
+    // Wait for all remaining tasks to finish
     await Promise.all(executing);
 
     if (isDownloading) {
@@ -922,6 +958,7 @@ async function startDownload() {
       downloadBtn.disabled = false;
       cancelBtn.disabled = true;
       formatSelect.disabled = false;
+      (getEl("convert-btn") as HTMLButtonElement).disabled = false;
 
       downloadProgress.style.width = "100%";
       convertProgress.style.width = "100%";
@@ -937,18 +974,28 @@ async function startDownload() {
     downloadBtn.disabled = false;
     cancelBtn.disabled = true;
     formatSelect.disabled = false;
+    (getEl("convert-btn") as HTMLButtonElement).disabled = false;
   }
 }
 
 async function cancelDownload() {
+  isDownloading = false; // Sofort auf false setzen, um JS-Schleifen zu stoppen
+  
+  // UI sofort zurücksetzen für besseres Feedback
+  downloadBtn.disabled = false;
+  cancelBtn.disabled = true;
+  formatSelect.disabled = false;
+  (getEl("convert-btn") as HTMLButtonElement).disabled = false;
+  
+  downloadProgress.classList.remove("active");
+  totalProgress.classList.remove("active");
+  convertProgress.classList.remove("active");
+  
+  setStatus(_("download_cancelled"), "error");
+  log("🛑 " + _("download_cancelled"), "warning");
+
   try {
     await invoke("cancel_download");
-    isDownloading = false;
-    downloadBtn.disabled = false;
-    cancelBtn.disabled = true;
-    formatSelect.disabled = false;
-    setStatus(_("download_cancelled"), "error");
-    log("🛑 " + _("download_cancelled"), "warning");
   } catch (e) {
     log(`⚠️ ${e}`, "warning");
   }

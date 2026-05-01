@@ -269,6 +269,8 @@ async fn get_playlist_info(
         "--no-warnings".to_string(),
         "-i".to_string(),
         "--no-color".to_string(),
+        "--extractor-args".to_string(),
+        "youtube:player_client=android".to_string(),
     ];
 
     if let Some(ref cp) = cookies_path {
@@ -280,7 +282,13 @@ async fn get_playlist_info(
 
     args.push(url.clone());
 
-    let output = tokio::task::spawn_blocking(move || Command::new("yt-dlp").args(&args).output())
+    let output = tokio::task::spawn_blocking(move || {
+        let mut cmd = Command::new("yt-dlp");
+        cmd.args(&args);
+        #[cfg(target_os = "windows")]
+        cmd.creation_flags(0x08000000);
+        cmd.output()
+    })
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| format!("yt-dlp not found: {}", e))?;
@@ -401,6 +409,8 @@ async fn download_track(
         format!("{}/%(title)s.%(ext)s", folder),
         "--extractor-args".to_string(),
         "youtube:player_client=android".to_string(), // Bypass some DRM
+        "--postprocessor-args".to_string(),
+        "ffmpeg:-threads 0".to_string(),
     ];
 
     if is_audio {
@@ -508,6 +518,18 @@ async fn download_track(
                                  _final_path = trimmed[start..end].trim().to_string();
                              }
                          }
+                         // Emit 100% progress immediately for existing files
+                         let progress = DownloadProgress {
+                            status: "downloading".to_string(),
+                            percent: 100.0,
+                            speed: "Skipped (Exists)".to_string(),
+                            eta: "0s".to_string(),
+                            title: current_title.clone(),
+                            current: track_index,
+                            total: total_tracks,
+                            filename: current_title.clone(),
+                        };
+                        let _ = app_handle.emit("download-progress", progress);
                     }
 
                     // Parse progress from default yt-dlp output
@@ -553,7 +575,8 @@ async fn download_track(
                     }
 
                     // Track converting
-                    if trimmed.starts_with("[ExtractAudio]") || trimmed.starts_with("[Merger]") || trimmed.starts_with("[VideoConvertor]") || trimmed.starts_with("[Fixup") {
+                    if (trimmed.starts_with("[ExtractAudio]") || trimmed.starts_with("[Merger]") || trimmed.starts_with("[VideoConvertor]") || trimmed.starts_with("[Fixup"))
+                       && !trimmed.contains("Not converting") {
                         let progress = DownloadProgress {
                             status: "converting".to_string(),
                             percent: 100.0,
@@ -673,7 +696,15 @@ async fn convert_file(app: AppHandle, request: ConvertRequest) -> Result<String,
 
     let output_path = format!("{}/{}_converted.{}", parent, stem, output_format);
 
-    let mut args: Vec<String> = vec!["-i".to_string(), input.clone(), "-y".to_string()];
+    let mut args: Vec<String> = vec![
+        "-hwaccel".to_string(),
+        "auto".to_string(),
+        "-i".to_string(),
+        input.clone(),
+        "-threads".to_string(),
+        "0".to_string(),
+        "-y".to_string(),
+    ];
 
     // Quality mapping
     match quality.as_str() {
