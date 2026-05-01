@@ -20,7 +20,7 @@
           <img src="/src/assets/logo.png" alt="Logo" width="28" height="28" style="border-radius: 6px;" />
         </div>
         <h1 id="app-title">SoundSync Downloader</h1>
-        <span class="version-badge" id="version-badge">v2.1.0</span>
+        <span class="version-badge" id="version-badge">v2.2.0</span>
       </div>
       <div class="header-right">
         <select id="language-select" class="language-select">
@@ -106,6 +106,26 @@
                 <option value="flv">flv</option>
                 <option value="wmv">wmv</option>
                 <option value="3gp">3gp</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="setting-group compact" id="quality-group">
+            <label class="input-label" id="quality-label">Qualität:</label>
+            <select id="quality-select" class="select-input">
+              <!-- Audio Qualities -->
+              <optgroup label="Audio (Bitrate)" id="audio-qualities">
+                <option value="best" selected>Beste Qualität (VBR 0 / ~320k)</option>
+                <option value="good">Gute Qualität (VBR 2 / ~192k)</option>
+                <option value="worst">Niedrigste Qualität (VBR 9 / ~65k)</option>
+              </optgroup>
+              <!-- Video Qualities -->
+              <optgroup label="Video (Auflösung)" id="video-qualities" style="display: none;">
+                <option value="best">Beste Qualität (Max)</option>
+                <option value="4k">4K (2160p)</option>
+                <option value="1080p">Full HD (1080p)</option>
+                <option value="720p">HD (720p)</option>
+                <option value="480p">SD (480p)</option>
+                <option value="worst">Niedrigste Qualität</option>
               </optgroup>
             </select>
           </div>
@@ -386,7 +406,7 @@
 
           <div class="version-info-section">
             <div class="version-header">
-               <span id="current-version-text">Aktuelle Version: 2.1.0</span>
+               <span id="current-version-text">Aktuelle Version: 2.2.0</span>
                <span id="update-status-tag" class="status-tag">Aktuell</span>
             </div>
             <button id="check-update-btn" class="btn btn-secondary btn-full">

@@ -35,6 +35,8 @@ interface AppConfig {
   discord_rpc: boolean;
   accent_color?: string;
   custom_background?: string;
+  format?: string;
+  quality?: string;
 }
 
 interface PlaylistEntry {
@@ -82,24 +84,80 @@ let pendingDetectedUrl = "";
 let appVersion = "0.0.0";
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
-const $ = (id: string) => document.getElementById(id)!;
-const urlInput = $("url-input") as HTMLInputElement;
-const folderInput = $("folder-input") as HTMLInputElement;
-const cookiesInput = $("cookies-input") as HTMLInputElement;
-const formatSelect = $("format-select") as HTMLSelectElement;
-const downloadBtn = $("download-btn") as HTMLButtonElement;
-const cancelBtn = $("cancel-btn") as HTMLButtonElement;
-const logOutput = $("log-output");
-const trackList = $("track-list");
-const downloadProgress = $("download-progress") as HTMLElement;
-const convertProgress = $("convert-progress") as HTMLElement;
-const totalProgress = $("total-progress") as HTMLElement;
+const $ = (id: string) => (document.getElementById(id) || document.createElement("div")) as HTMLElement;
 const maybeElement = (id: string) => document.getElementById(id);
+
+// Globale Elemente sicher abrufen
+const getEl = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+let urlInput: HTMLInputElement;
+let folderInput: HTMLInputElement;
+let cookiesInput: HTMLInputElement;
+let formatSelect: HTMLSelectElement;
+let qualitySelect: HTMLSelectElement;
+let audioQualities: HTMLElement;
+let videoQualities: HTMLElement;
+let downloadBtn: HTMLButtonElement;
+let cancelBtn: HTMLButtonElement;
+let logOutput: HTMLElement;
+let trackList: HTMLElement;
+let downloadProgress: HTMLElement;
+let convertProgress: HTMLElement;
+let totalProgress: HTMLElement;
+
+function setupElements() {
+  try {
+    urlInput = getEl("url-input");
+    folderInput = getEl("folder-input");
+    cookiesInput = getEl("cookies-input");
+    formatSelect = getEl("format-select");
+    qualitySelect = getEl("quality-select");
+    audioQualities = getEl("audio-qualities");
+    videoQualities = getEl("video-qualities");
+    downloadBtn = getEl("download-btn");
+    cancelBtn = getEl("cancel-btn");
+    logOutput = getEl("log-output");
+    trackList = getEl("track-list");
+    downloadProgress = getEl("download-progress");
+    convertProgress = getEl("convert-progress");
+    totalProgress = getEl("total-progress");
+  } catch (e) {
+    console.error("Kritischer Fehler: Wichtige UI-Elemente fehlen!", e);
+  }
+}
 
 
 
 // ─── Init ────────────────────────────────────────────────────────────────────
+
+function on(id: string, event: string, handler: (e: any) => void) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener(event, handler);
+  }
+}
+
+function updateQualityOptions() {
+  const isVideo = (formatSelect.options[formatSelect.selectedIndex].parentNode as HTMLOptGroupElement)?.label === "Video";
+  if (isVideo) {
+    audioQualities.style.display = "none";
+    videoQualities.style.display = "block";
+    const currentVal = qualitySelect.value;
+    if (["best", "good", "worst"].includes(currentVal) && currentVal !== "best" && currentVal !== "worst") {
+      qualitySelect.value = "1080p"; // sensible fallback
+    }
+  } else {
+    audioQualities.style.display = "block";
+    videoQualities.style.display = "none";
+    const currentVal = qualitySelect.value;
+    if (["best", "4k", "1080p", "720p", "480p", "worst"].includes(currentVal) && currentVal !== "best" && currentVal !== "worst") {
+      qualitySelect.value = "best"; // sensible fallback
+    }
+  }
+}
+
 async function init() {
+  setupElements();
   appVersion = await getVersion();
   try {
     config = await invoke<AppConfig>("load_config");
@@ -107,9 +165,16 @@ async function init() {
     if (config.cookies_path) cookiesInput.value = config.cookies_path;
     if (config.auto_url_detection === undefined) config.auto_url_detection = true;
     if (config.discord_rpc === undefined) config.discord_rpc = true;
+    if (config.format) formatSelect.value = config.format;
+    
+    updateQualityOptions();
+    if (config.quality) qualitySelect.value = config.quality;
 
     applyTheme();
-    setupEventListeners();
+    if (config.accent_color) {
+        ($("accent-color-picker") as HTMLInputElement).value = config.accent_color;
+    }
+    
     updateRemoteStatus();
     
     // Discord RPC Initialisierung
@@ -232,20 +297,20 @@ function updateUI() {
   const dragDropText = maybeElement("drag-drop-text");
   if (dragDropText) dragDropText.textContent = _("drag_drop_hint");
   $("log-search").setAttribute("placeholder", _("search_placeholder"));
-  ($("auto-url-toggle") as HTMLInputElement).checked = config.auto_url_detection;
+  const autoUrlToggle = document.getElementById("auto-url-toggle") as HTMLInputElement;
+  if (autoUrlToggle) autoUrlToggle.checked = config.auto_url_detection;
 }
 
 // ─── Event Listeners ─────────────────────────────────────────────────────────
 function setupEventListeners() {
-  // URL input → enable/disable download button
-  urlInput.addEventListener("input", updateDownloadBtnState);
-  $("auto-url-toggle").addEventListener("change", (e) => {
+  on("url-input", "input", updateDownloadBtnState);
+  on("auto-url-toggle", "change", (e) => {
     config.auto_url_detection = (e.target as HTMLInputElement).checked;
     saveConfig();
   });
 
   // ─── Settings Modal ────────────────────────────────────────────────────────
-  $("settings-btn").addEventListener("click", () => {
+  on("settings-btn", "click", () => {
     ($("settings-modal") as HTMLElement).style.display = "flex";
     // Sync checkboxes with current config
     ($("discord-rpc-toggle") as HTMLInputElement).checked = config.discord_rpc;
@@ -254,23 +319,27 @@ function setupEventListeners() {
     ($("accent-color-picker") as HTMLInputElement).value = config.accent_color || "#6c5ce7";
   });
 
-  $("accent-color-picker").addEventListener("input", (e) => {
+  on("accent-color-picker", "input", (e) => {
     config.accent_color = (e.target as HTMLInputElement).value;
     applyTheme();
   });
 
-  $("accent-color-picker").addEventListener("change", () => saveConfig());
-
-  $("reset-theme-btn").addEventListener("click", () => {
-    config.accent_color = undefined;
-    config.custom_background = undefined;
-    ($("accent-color-picker") as HTMLInputElement).value = "#6c5ce7";
-    applyTheme();
+  on("accent-color-picker", "change", () => {
     saveConfig();
-    log("🎨 Theme zurückgesetzt", "info");
+    log("🎨 Akzentfarbe gespeichert", "success");
   });
 
-  $("bg-browse-btn").addEventListener("click", async () => {
+  on("reset-theme-btn", "click", () => {
+    config.accent_color = "#6c5ce7";
+    config.custom_background = "";
+    const picker = document.getElementById("accent-color-picker") as HTMLInputElement;
+    if (picker) picker.value = "#6c5ce7";
+    applyTheme();
+    saveConfig();
+    log("🔄 Design zurückgesetzt", "info");
+  });
+
+  on("bg-browse-btn", "click", async () => {
     const file = await open({
       title: _("select_bg"),
       filters: [{ name: "Images", extensions: ["jpg", "png", "webp", "jpeg"] }],
@@ -283,31 +352,18 @@ function setupEventListeners() {
     }
   });
 
-  listen("remote-url-received", (event) => {
-    const url = event.payload as string;
-    log(`📱 Remote-Link erhalten: ${url}`, "info");
-    urlInput.value = url;
-    // Trigger URL detection logic
-    const inputEvent = new Event("input", { bubbles: true });
-    urlInput.dispatchEvent(inputEvent);
-    
-    // If we are in settings, maybe notify
-    if ($("settings-modal").style.display !== "none") {
-       sendNotification({ title: "SoundSync Remote", body: "Link erfolgreich empfangen!" });
-    }
-  });
-
-  $("settings-modal-close").addEventListener("click", () => {
+  on("settings-modal-close", "click", () => {
     ($("settings-modal") as HTMLElement).style.display = "none";
   });
 
-  $("save-settings-btn").addEventListener("click", async () => {
+  on("save-settings-btn", "click", async () => {
     config.discord_rpc = ($("discord-rpc-toggle") as HTMLInputElement).checked;
     config.auto_url_detection = ($("settings-auto-url-toggle") as HTMLInputElement).checked;
     config.disable_changelog = ($("disable-changelog-toggle") as HTMLInputElement).checked;
     
     // Update main toggle if changed
-    ($("auto-url-toggle") as HTMLInputElement).checked = config.auto_url_detection;
+    const mainToggle = document.getElementById("auto-url-toggle") as HTMLInputElement;
+    if (mainToggle) mainToggle.checked = config.auto_url_detection;
     
     await saveConfig();
     ($("settings-modal") as HTMLElement).style.display = "none";
@@ -321,7 +377,7 @@ function setupEventListeners() {
     }
   });
 
-  $("check-update-btn").addEventListener("click", () => checkForUpdates(true));
+  on("check-update-btn", "click", () => checkForUpdates(true));
 
   if (config.auto_url_detection) {
       startClipboardWatcher();
@@ -331,9 +387,11 @@ function setupEventListeners() {
       hideDetectedUrlPrompt();
       log("Automatische URL-Erkennung deaktiviert", "warning");
   }
-  $("detected-url-use").addEventListener("click", useDetectedUrl);
-  $("detected-url-dismiss").addEventListener("click", hideDetectedUrlPrompt);
-  $("clear-url-btn").addEventListener("click", () => {
+
+  on("detected-url-use", "click", useDetectedUrl);
+  on("detected-url-dismiss", "click", hideDetectedUrlPrompt);
+  
+  on("clear-url-btn", "click", () => {
     urlInput.value = "";
     updateDownloadBtnState();
     log("🧹 URL und Liste geleert", "info");
@@ -345,7 +403,7 @@ function setupEventListeners() {
   });
 
   // Browse folder
-  $("browse-btn").addEventListener("click", async () => {
+  on("browse-btn", "click", async () => {
     const folder = await open({ directory: true, title: _("folder_label") });
     if (folder) {
       config.download_folder = folder as string;
@@ -357,7 +415,7 @@ function setupEventListeners() {
   });
 
   // Open folder
-  $("open-folder-btn").addEventListener("click", async () => {
+  on("open-folder-btn", "click", async () => {
     if (config.download_folder) {
       try {
         await openPath(config.download_folder);
@@ -368,7 +426,7 @@ function setupEventListeners() {
   });
 
   // Browse cookies
-  $("cookies-btn").addEventListener("click", async () => {
+  on("cookies-btn", "click", async () => {
     const file = await open({
       title: _("cookies_label"),
       filters: [{ name: "Text", extensions: ["txt"] }],
@@ -382,17 +440,30 @@ function setupEventListeners() {
   });
 
   // Download
-  downloadBtn.addEventListener("click", startDownload);
-  cancelBtn.addEventListener("click", cancelDownload);
+  if (downloadBtn) downloadBtn.addEventListener("click", startDownload);
+  if (cancelBtn) cancelBtn.addEventListener("click", cancelDownload);
 
   // Clear log
-  $("clear-log-btn").addEventListener("click", () => {
+  on("clear-log-btn", "click", () => {
     logOutput.innerHTML = "";
     log("🧹 Log cleared", "info");
   });
 
+  // Format and Quality changes
+  on("format-select", "change", () => {
+    config.format = formatSelect.value;
+    updateQualityOptions();
+    config.quality = qualitySelect.value;
+    void saveConfig();
+  });
+  
+  on("quality-select", "change", () => {
+    config.quality = qualitySelect.value;
+    void saveConfig();
+  });
+
   // Log search
-  ($("log-search") as HTMLInputElement).addEventListener("input", (e) => {
+  on("log-search", "input", (e) => {
     const query = (e.target as HTMLInputElement).value.toLowerCase();
     logOutput.querySelectorAll(".log-line").forEach((el) => {
       (el as HTMLElement).style.display =
@@ -401,10 +472,10 @@ function setupEventListeners() {
   });
 
   // Theme toggle
-  $("theme-toggle").addEventListener("click", toggleTheme);
+  on("theme-toggle", "click", toggleTheme);
 
   // Language
-  $("language-select").addEventListener("change", (e) => {
+  on("language-select", "change", (e) => {
     const lang = (e.target as HTMLSelectElement).value;
     if (translations[lang]) {
       currentLang = lang;
@@ -417,18 +488,18 @@ function setupEventListeners() {
   });
 
   // Convert modal
-  $("convert-btn").addEventListener("click", () => {
+  on("convert-btn", "click", () => {
     $("convert-modal").style.display = "flex";
   });
-  $("convert-modal-close").addEventListener("click", () => {
+  on("convert-modal-close", "click", () => {
     $("convert-modal").style.display = "none";
   });
-  $("convert-modal").addEventListener("click", (e) => {
+  on("convert-modal", "click", (e) => {
     if (e.target === $("convert-modal")) $("convert-modal").style.display = "none";
   });
 
   // Convert browse
-  $("convert-browse-btn").addEventListener("click", async () => {
+  on("convert-browse-btn", "click", async () => {
     const file = await open({ title: _("select_file") });
     if (file) {
       ($("convert-file-input") as HTMLInputElement).value = file as string;
@@ -438,22 +509,22 @@ function setupEventListeners() {
   });
 
   // Start conversion
-  $("start-convert-btn").addEventListener("click", startConversion);
+  on("start-convert-btn", "click", startConversion);
 
   // System check modal
-  $("system-check-btn").addEventListener("click", () => {
+  on("system-check-btn", "click", () => {
     $("system-modal").style.display = "flex";
     checkSystem();
   });
-  $("system-modal-close").addEventListener("click", () => {
+  on("system-modal-close", "click", () => {
     $("system-modal").style.display = "none";
   });
-  $("system-modal").addEventListener("click", (e) => {
+  on("system-modal", "click", (e) => {
     if (e.target === $("system-modal")) $("system-modal").style.display = "none";
   });
 
   // Install buttons
-  $("install-ffmpeg-btn").addEventListener("click", async () => {
+  on("install-ffmpeg-btn", "click", async () => {
     log("🔧 Installing FFmpeg...", "info");
     try {
       await invoke("install_ffmpeg");
@@ -464,7 +535,7 @@ function setupEventListeners() {
     }
   });
 
-  $("install-ytdlp-btn").addEventListener("click", async () => {
+  on("install-ytdlp-btn", "click", async () => {
     log("🔧 Installing yt-dlp...", "info");
     try {
       await invoke("install_ytdlp");
@@ -476,11 +547,10 @@ function setupEventListeners() {
   });
 
   // Scroll to current
-  $("scroll-to-current-btn").addEventListener("click", () => {
+  on("scroll-to-current-btn", "click", () => {
     const active = trackList.querySelector(".track-card.active");
     if (active) active.scrollIntoView({ behavior: "smooth", block: "center" });
   });
-
   // Drag and drop
   const dropZone = maybeElement("drag-drop-zone");
   if (dropZone) {
@@ -505,8 +575,10 @@ function setupEventListeners() {
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "Enter" && !downloadBtn.disabled) startDownload();
     if (e.key === "Escape") {
-      $("convert-modal").style.display = "none";
-      $("system-modal").style.display = "none";
+      const convModal = maybeElement("convert-modal");
+      const sysModal = maybeElement("system-modal");
+      if (convModal) convModal.style.display = "none";
+      if (sysModal) sysModal.style.display = "none";
     }
   });
 }
@@ -514,10 +586,12 @@ function setupEventListeners() {
 // ─── Tauri Event Listeners ───────────────────────────────────────────────────
 function setupTauriListeners() {
   listen<DownloadProgress>("download-progress", (event) => {
+    if (!isDownloading) return;
     const p = event.payload;
     
-    // Global progress (shows the last active)
+    // Global progress
     if (p.status === "downloading") {
+      updateTotalProgress(p.current, p.percent);
       downloadProgress.style.width = `${p.percent}%`;
       $("progress-percent").textContent = `${p.percent.toFixed(1)}%`;
       $("progress-label").textContent = _("progress_downloading", {
@@ -527,6 +601,7 @@ function setupTauriListeners() {
       });
       updateDiscordPresence(`Downloading: ${p.percent.toFixed(0)}%`, `${p.current}/${p.total} | ${p.title}`);
     } else if (p.status === "converting") {
+      updateTotalProgress(p.current, 100);
       convertProgress.style.width = "100%";
       $("convert-label").textContent = `🔄 ${p.title}`;
       updateDiscordPresence("Converting track...", p.title);
@@ -798,6 +873,7 @@ async function startDownload() {
               format: formatSelect.value,
               folder: config.download_folder,
               cookies_path: config.cookies_path || null,
+              quality: qualitySelect.value,
             },
             trackIndex: i + 1,
             totalTracks: totalTracks,
@@ -999,27 +1075,36 @@ function resetProgress() {
   $("total-percent").textContent = "";
 }
 
-function updateTotalProgress() {
+function updateTotalProgress(currentTrackIndex?: number, trackPercent?: number) {
   if (totalTracks <= 0) return;
-  const pct = (completedTracks / totalTracks) * 100;
+  
+  // Real-time overall value: (completed tracks + progress of current track)
+  let currentOverallValue = completedTracks;
+  if (currentTrackIndex !== undefined && trackPercent !== undefined) {
+    if (currentTrackIndex > completedTracks) {
+       currentOverallValue = (currentTrackIndex - 1) + (trackPercent / 100);
+    }
+  }
+
+  const pct = (currentOverallValue / totalTracks) * 100;
   totalProgress.style.width = `${pct}%`;
-  $("total-percent").textContent = `${pct.toFixed(0)}%`;
+  $("total-percent").textContent = `${Math.min(100, Math.floor(pct))}%`;
 
   const elapsed = (Date.now() - startTime) / 1000;
-  const avgPerTrack = completedTracks > 0 ? elapsed / completedTracks : 0;
-  const remaining = (totalTracks - completedTracks) * avgPerTrack;
-  const eta = formatTime(remaining);
+  const avgPerTrack = currentOverallValue > 0 ? elapsed / currentOverallValue : 0;
+  const remaining = (totalTracks - currentOverallValue) * avgPerTrack;
+  const eta = remaining > 0 ? formatTime(remaining) : "--:--:--";
 
   $("total-progress-label").textContent = _("total_progress_detail", {
-    percent: pct.toFixed(0),
+    percent: Math.floor(pct).toString(),
     completed: String(completedTracks),
     total: String(totalTracks),
     eta,
   });
 
-  // Update track cards
+  // Highlight active track card
   trackList.querySelectorAll(".track-card").forEach((card, idx) => {
-    card.classList.toggle("active", idx === completedTracks);
+    card.classList.toggle("active", idx === (currentTrackIndex ? currentTrackIndex - 1 : completedTracks));
   });
 }
 
@@ -1128,7 +1213,7 @@ async function updateRemoteStatus() {
         </div>
       `;
 
-      $("copy-remote-url").addEventListener("click", async () => {
+      on("copy-remote-url", "click", async () => {
         try {
           await navigator.clipboard.writeText(remoteUrl);
           const btn = $("copy-remote-url");

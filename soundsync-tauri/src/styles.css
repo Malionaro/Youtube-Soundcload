@@ -609,7 +609,54 @@ input:checked + .toggle-track::after {
   color: black;
 }
 
-/* ═══ End of Styles ═══ */
+.check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+}
+
+.check-icon {
+  font-size: 20px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.check-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.check-info strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.check-info span {
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all; /* Für lange Versions-Strings */
+}
+
+.check-icon.loading {
+  animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 /* ═══ Modals ═══ */
 .modal {
   background: var(--bg-card);
@@ -806,12 +853,14 @@ input:checked + .toggle-track::after {
 .custom-bg-overlay {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: -2; /* Hinter allem */
   background-size: cover;
   background-position: center;
-  opacity: 0.2;
-  filter: blur(20px);
+  background-repeat: no-repeat;
+  filter: blur(40px) brightness(0.6);
+  transform: scale(1.1); /* Verhindert weiße Ränder durch den Blur */
   pointer-events: none;
+  transition: background-image 0.5s ease;
 }
 
 .remote-section {

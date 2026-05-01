@@ -1,6 +1,6 @@
 [package]
 name = "SoundSync-Downloader"
-version = "2.1.0"
+version = "2.2.0"
 description = "SoundSync Downloader – YouTube & SoundCloud Downloader"
 authors = ["Malionaro"]
 edition = "2021"

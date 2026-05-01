@@ -2,91 +2,375 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SoundSync Remote</title>
+    <!-- PWA meta tags -->
+    <meta name="theme-color" content="#1a1a24">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
+        :root {
+            --bg-dark: #0a0a0f;
+            --bg-card: #1a1a24;
+            --bg-input: #22222e;
+            --primary: #8e7cf3;
+            --text-main: #ffffff;
+            --text-sub: #8888a0;
+            --border: #2a2a3a;
+            --success: #2ecc71;
+            --radius: 12px;
+        }
+
         body {
-            font-family: -apple-system, system-ui, sans-serif;
-            background: #0a0a0f;
-            color: white;
+            font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            padding: 20px;
+            min-height: 100vh;
             box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
         }
+
         .container {
             width: 100%;
             max-width: 400px;
-            background: #1a1a24;
-            padding: 30px;
+            background: var(--bg-card);
+            padding: 24px;
             border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+            box-sizing: border-box;
+            margin-top: 10vh;
+        }
+
+        h1 {
+            font-size: 22px;
+            margin: 0 0 8px 0;
+            color: var(--primary);
             text-align: center;
         }
-        h1 { font-size: 24px; margin-bottom: 10px; color: #8e7cf3; }
-        p { color: #8888a0; font-size: 14px; margin-bottom: 20px; }
-        input {
+
+        p {
+            color: var(--text-sub);
+            font-size: 14px;
+            margin: 0 0 20px 0;
+            text-align: center;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-sub);
+            margin-bottom: 6px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input[type="text"] {
             width: 100%;
-            padding: 15px;
-            background: #22222e;
-            border: 1px solid #2a2a3a;
-            border-radius: 10px;
-            color: white;
+            padding: 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-main);
             font-size: 16px;
-            margin-bottom: 20px;
             outline: none;
             box-sizing: border-box;
+            transition: border-color 0.2s;
         }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+        }
+
+        .toggle-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+        }
+
+        .toggle-label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        select {
+            background: var(--bg-dark);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            border-radius: 8px;
+            outline: none;
+            font-size: 14px;
+        }
+
+        /* Toggle switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--border);
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--primary);
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
         button {
             width: 100%;
-            padding: 15px;
-            background: #8e7cf3;
+            padding: 16px;
+            background: var(--primary);
             border: none;
-            border-radius: 10px;
+            border-radius: var(--radius);
             color: white;
-            font-size: 18px;
-            font-weight: bold;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: transform 0.1s, opacity 0.2s;
+            margin-top: 8px;
         }
-        button:active { transform: scale(0.95); }
-        .success { color: #2ecc71; margin-top: 15px; display: none; }
+
+        button:active {
+            transform: scale(0.97);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-msg {
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 16px;
+            height: 20px;
+        }
+        .success { color: var(--success); }
+        .error { color: #e74c3c; }
+
+        /* Progress Card */
+        .progress-card {
+            margin-top: 24px;
+            background: var(--bg-input);
+            padding: 16px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            display: none;
+        }
+        .progress-card.active {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .progress-title {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-main);
+        }
+
+        .progress-bar-bg {
+            height: 8px;
+            background: var(--bg-dark);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-sub);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            background: rgba(142, 124, 243, 0.2);
+            color: var(--primary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>SoundSync Remote</h1>
-        <p>Sende einen Link an deinen PC</p>
-        <input type="text" id="url-input" placeholder="YouTube oder SoundCloud Link..." />
-        <button onclick="sendUrl()">Senden</button>
-        <div id="status" class="success">Gesendet! ✅</div>
+        <p>Sende Links und verwalte Downloads</p>
+
+        <div class="input-group">
+            <label for="url-input">Link</label>
+            <input type="text" id="url-input" placeholder="YouTube oder SoundCloud..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+        </div>
+
+        <div class="toggle-group">
+            <span class="toggle-label">Format</span>
+            <select id="format-select">
+                <option value="audio">Audio (MP3)</option>
+                <option value="video">Video (MP4)</option>
+            </select>
+        </div>
+
+        <div class="toggle-group">
+            <span class="toggle-label">Sofort starten</span>
+            <label class="switch">
+                <input type="checkbox" id="auto-start-toggle" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <button id="send-btn" onclick="sendPayload()">An PC senden</button>
+        
+        <div id="status-msg" class="status-msg"></div>
+
+        <div class="progress-card" id="progress-card">
+            <div class="status-badge" id="dl-status-badge">DOWNLOADING</div>
+            <div class="progress-title" id="dl-title">Lade Metadaten...</div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="dl-bar"></div>
+            </div>
+            <div class="progress-stats">
+                <span id="dl-percent">0%</span>
+                <span id="dl-eta-speed">--</span>
+            </div>
+        </div>
     </div>
 
     <script>
-        async function sendUrl() {
-            const input = document.getElementById("url-input");
-            const status = document.getElementById("status");
-            const url = input.value.trim();
+        const urlInput = document.getElementById("url-input");
+        const formatSelect = document.getElementById("format-select");
+        const autoStartToggle = document.getElementById("auto-start-toggle");
+        const sendBtn = document.getElementById("send-btn");
+        const statusMsg = document.getElementById("status-msg");
+        const progressCard = document.getElementById("progress-card");
+        
+        const dlBadge = document.getElementById("dl-status-badge");
+        const dlTitle = document.getElementById("dl-title");
+        const dlBar = document.getElementById("dl-bar");
+        const dlPercent = document.getElementById("dl-percent");
+        const dlEtaSpeed = document.getElementById("dl-eta-speed");
+
+        function showMessage(text, isError = false) {
+            statusMsg.textContent = text;
+            statusMsg.className = "status-msg " + (isError ? "error" : "success");
+            setTimeout(() => { statusMsg.textContent = ""; }, 3000);
+        }
+
+        async function sendPayload() {
+            const url = urlInput.value.trim();
             if (!url) return;
 
+            const payload = {
+                url: url,
+                format: formatSelect.value,
+                autoStart: autoStartToggle.checked
+            };
+
+            sendBtn.disabled = true;
             try {
                 const response = await fetch("/send", {
                     method: "POST",
-                    body: url
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
                 });
+                
                 if (response.ok) {
-                    input.value = "";
-                    status.style.display = "block";
-                    setTimeout(() => status.style.display = "none", 3000);
+                    urlInput.value = "";
+                    showMessage("Erfolgreich gesendet! ✅");
+                } else {
+                    showMessage("Serverfehler!", true);
                 }
             } catch (e) {
-                alert("Fehler beim Senden!");
+                showMessage("Verbindungsfehler!", true);
+            } finally {
+                sendBtn.disabled = false;
             }
         }
+
+        async function pollStatus() {
+            try {
+                const res = await fetch("/status");
+                if (!res.ok) return;
+                
+                const data = await res.json();
+                if (data) {
+                    progressCard.classList.add("active");
+                    
+                    dlTitle.textContent = data.title || "Wird heruntergeladen...";
+                    dlBar.style.width = data.percent + "%";
+                    dlPercent.textContent = data.percent.toFixed(1) + "%";
+                    
+                    if (data.status === "converting") {
+                        dlBadge.textContent = "CONVERTING";
+                        dlEtaSpeed.textContent = "Audio wird extrahiert...";
+                    } else {
+                        dlBadge.textContent = "DOWNLOADING";
+                        dlEtaSpeed.textContent = `${data.speed} • ETA ${data.eta}`;
+                    }
+                } else {
+                    progressCard.classList.remove("active");
+                }
+            } catch (e) {
+                // Silently fail polling to avoid spamming errors if PC goes offline
+            }
+        }
+
+        // Start polling every 1.5s
+        setInterval(pollStatus, 1500);
     </script>
 </body>
 </html>

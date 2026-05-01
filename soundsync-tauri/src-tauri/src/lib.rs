@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 use std::thread;
 use tiny_http::{Server, Response, Method};
-use local_ip_address::local_ip;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -20,6 +19,7 @@ pub struct AppState {
     pub active_download_pids: Arc<Mutex<Vec<u32>>>,
     pub config: Mutex<AppConfig>,
     pub discord_client: Mutex<Option<DiscordClient>>,
+    pub current_progress: Mutex<Option<DownloadProgress>>,
 }
 
 pub struct DiscordClient {
@@ -40,10 +40,16 @@ pub struct AppConfig {
     pub discord_rpc: bool,
     pub accent_color: Option<String>,
     pub custom_background: Option<String>,
+    #[serde(default = "default_quality")]
+    pub quality: String,
 }
 
 fn default_auto_url_detection() -> bool {
     true
+}
+
+fn default_quality() -> String {
+    "best".to_string()
 }
 
 impl Default for AppConfig {
@@ -58,6 +64,7 @@ impl Default for AppConfig {
             discord_rpc: false,
             accent_color: None,
             custom_background: None,
+            quality: "best".to_string(),
         }
     }
 }
@@ -74,6 +81,14 @@ fn dirs_next() -> Option<PathBuf> {
 }
 
 // ─── Data Structures ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemotePayload {
+    pub url: String,
+    pub format: Option<String>,
+    #[serde(rename = "autoStart")]
+    pub auto_start: Option<bool>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlaylistEntry {
@@ -116,6 +131,7 @@ pub struct DownloadRequest {
     pub format: String,
     pub folder: String,
     pub cookies_path: Option<String>,
+    pub quality: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -368,6 +384,7 @@ async fn download_track(
     let format = request.format.clone();
     let url = request.url.clone();
     let cookies = request.cookies_path.clone();
+    let quality = request.quality.clone();
     let active_download_pids = state.active_download_pids.clone();
 
     // Determine if audio or video format
@@ -380,8 +397,6 @@ async fn download_track(
         "--newline".to_string(),
         "--no-color".to_string(),
         "--progress".to_string(),
-        "--progress-template".to_string(),
-        "%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s".to_string(),
         "-o".to_string(),
         format!("{}/%(title)s.%(ext)s", folder),
         "--extractor-args".to_string(),
@@ -393,6 +408,14 @@ async fn download_track(
             "ogg" => "vorbis",
             _ => &format,
         };
+        
+        let audio_quality = match quality.as_str() {
+            "best" => "0",
+            "good" => "2",
+            "worst" => "9",
+            _ => "0",
+        };
+
         args.extend([
             "-f".to_string(),
             "bestaudio/best".to_string(),
@@ -400,12 +423,21 @@ async fn download_track(
             "--audio-format".to_string(),
             codec.to_string(),
             "--audio-quality".to_string(),
-            "0".to_string(),
+            audio_quality.to_string(),
         ]);
     } else {
+        let video_format = match quality.as_str() {
+            "4k" => "bestvideo[height<=2160]+bestaudio/best",
+            "1080p" => "bestvideo[height<=1080]+bestaudio/best",
+            "720p" => "bestvideo[height<=720]+bestaudio/best",
+            "480p" => "bestvideo[height<=480]+bestaudio/best",
+            "worst" => "worstvideo+worstaudio/worst",
+            _ => "bestvideo+bestaudio/best",
+        };
+        
         args.extend([
             "-f".to_string(),
-            "bestvideo+bestaudio/best".to_string(),
+            video_format.to_string(),
             "--merge-output-format".to_string(),
             format.clone(),
         ]);
@@ -478,46 +510,65 @@ async fn download_track(
                          }
                     }
 
-                    // Parse progress
-                    if trimmed.contains('%') && trimmed.contains('|') {
-                        let parts: Vec<&str> = trimmed.split('|').collect();
-                        if parts.len() >= 3 {
-                            let percent_str = parts[0].trim().replace('%', "");
-                            let percent: f64 = percent_str.trim().parse().unwrap_or(0.0);
-                            let speed = parts[1].trim().to_string();
-                            let eta = parts[2].trim().to_string();
+                    // Parse progress from default yt-dlp output
+                    if trimmed.starts_with("[download]") && trimmed.contains('%') {
+                        if let Some(percent_idx) = trimmed.find('%') {
+                            let prefix = &trimmed[..percent_idx];
+                            // Extract just the numbers before the %
+                            let percent_str: String = prefix.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect();
+                            let percent: f64 = percent_str.parse().unwrap_or(0.0);
+                            
+                            // Extract speed and ETA
+                            let mut speed = String::new();
+                            let mut eta = String::new();
+                            
+                            if let Some(at_idx) = trimmed.find(" at ") {
+                                if let Some(eta_idx) = trimmed.find(" ETA ") {
+                                    if at_idx + 4 < eta_idx {
+                                        speed = trimmed[at_idx + 4..eta_idx].trim().to_string();
+                                        eta = trimmed[eta_idx + 5..].trim().to_string();
+                                    }
+                                } else {
+                                    speed = trimmed[at_idx + 4..].trim().to_string();
+                                }
+                            }
 
-                            let _ = app_handle.emit(
-                                "download-progress",
-                                DownloadProgress {
-                                    status: "downloading".to_string(),
-                                    percent,
-                                    speed,
-                                    eta,
-                                    title: current_title.clone(),
-                                    current: track_index,
-                                    total: total_tracks,
-                                    filename: current_title.clone(),
-                                },
-                            );
-                        }
-                    }
-
-                    // Track converting
-                    if trimmed.starts_with("[ExtractAudio]") || trimmed.starts_with("[Merger]") {
-                        let _ = app_handle.emit(
-                            "download-progress",
-                            DownloadProgress {
-                                status: "converting".to_string(),
-                                percent: 100.0,
-                                speed: String::new(),
-                                eta: String::new(),
+                            let progress = DownloadProgress {
+                                status: "downloading".to_string(),
+                                percent,
+                                speed,
+                                eta,
                                 title: current_title.clone(),
                                 current: track_index,
                                 total: total_tracks,
                                 filename: current_title.clone(),
-                            },
-                        );
+                            };
+
+                            let _ = app_handle.emit("download-progress", progress.clone());
+                            {
+                                let state = app_handle.state::<AppState>();
+                                *state.current_progress.lock().unwrap() = Some(progress);
+                            }
+                        }
+                    }
+
+                    // Track converting
+                    if trimmed.starts_with("[ExtractAudio]") || trimmed.starts_with("[Merger]") || trimmed.starts_with("[VideoConvertor]") || trimmed.starts_with("[Fixup") {
+                        let progress = DownloadProgress {
+                            status: "converting".to_string(),
+                            percent: 100.0,
+                            speed: String::new(),
+                            eta: String::new(),
+                            title: current_title.clone(),
+                            current: track_index,
+                            total: total_tracks,
+                            filename: current_title.clone(),
+                        };
+                        let _ = app_handle.emit("download-progress", progress.clone());
+                        {
+                            let state = app_handle.state::<AppState>();
+                            *state.current_progress.lock().unwrap() = Some(progress);
+                        }
                     }
 
                     // Emit log line
@@ -553,6 +604,11 @@ async fn download_track(
     })
     .await
     .map_err(|e| e.to_string())?;
+
+    {
+        let state_val = app.state::<AppState>();
+        *state_val.current_progress.lock().unwrap() = None;
+    }
 
     result
 }
@@ -904,17 +960,35 @@ use tauri::{
 // Icon updated: 2026-05-01
 #[tauri::command]
 fn ss_get_local_ip() -> Result<String, String> {
-    local_ip().map(|ip| ip.to_string()).map_err(|e| e.to_string())
+    use std::net::UdpSocket;
+    
+    // Wir versuchen eine Verbindung zu einer Dummy-Adresse aufzubauen (8.8.8.8),
+    // um herauszufinden, welches Interface das System für den Netzwerkverkehr nutzt.
+    // Es wird kein tatsächliches Paket gesendet.
+    let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+    socket.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
+    let local_addr = socket.local_addr().map_err(|e| e.to_string())?;
+    
+    let ip = local_addr.ip();
+    
+    // Falls wir doch auf einer Hamachi/Virtual-IP (26.x.x.x oder ähnlich) landen,
+    // oder falls die Methode fehlschlägt, nutzen wir local_ip() als Fallback.
+    if ip.is_loopback() || ip.is_unspecified() {
+         return local_ip_address::local_ip()
+            .map(|ip| ip.to_string())
+            .map_err(|e| e.to_string());
+    }
+
+    Ok(ip.to_string())
 }
 
 #[tauri::command]
 fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
     let server_handle = app.clone();
     thread::spawn(move || {
-        let ip = local_ip().unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)));
-        let addr = format!("{}:3030", ip);
-        
-        let server = match Server::http(&addr) {
+        let addr = "0.0.0.0:3030";
+
+        let server = match Server::http(addr) {
             Ok(s) => s,
             Err(_) => return,
         };
@@ -927,17 +1001,47 @@ fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
                         .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..]).unwrap());
                     let _ = request.respond(response);
                 }
+                (&Method::Get, "/status") => {
+                    let state = server_handle.state::<AppState>();
+                    let progress = state.current_progress.lock().unwrap().clone();
+                    let json = serde_json::to_string(&progress).unwrap_or_else(|_| "null".to_string());
+                    let response = Response::from_string(json)
+                        .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap())
+                        .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap());
+                    let _ = request.respond(response);
+                }
                 (&Method::Post, "/send") => {
                     let mut content = String::new();
                     let _ = request.as_reader().read_to_string(&mut content);
-                    // content is expected to be simple URL or JSON
-                    let url = content.trim().to_string();
-                    if !url.is_empty() {
-                        let _ = server_handle.emit("remote-url-received", url);
-                        let _ = request.respond(Response::from_string("OK"));
+
+                    if let Ok(payload) = serde_json::from_str::<RemotePayload>(&content) {
+                        let _ = server_handle.emit("remote-url-received", payload);
+                        let _ = request.respond(Response::from_string("OK")
+                            .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap()));
                     } else {
-                        let _ = request.respond(Response::from_string("Empty URL").with_status_code(400));
+                        // Fallback for simple string URL
+                        let url = content.trim().to_string();
+                        if !url.is_empty() {
+                            let payload = RemotePayload {
+                                url,
+                                format: None,
+                                auto_start: None,
+                            };
+                            let _ = server_handle.emit("remote-url-received", payload);
+                            let _ = request.respond(Response::from_string("OK")
+                                .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap()));
+                        } else {
+                            let _ = request.respond(Response::from_string("Empty URL").with_status_code(400)
+                                .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap()));
+                        }
                     }
+                }
+                (&Method::Options, _) => {
+                    let response = Response::from_string("")
+                        .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap())
+                        .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"POST, GET, OPTIONS"[..]).unwrap())
+                        .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type"[..]).unwrap());
+                    let _ = request.respond(response);
                 }
                 _ => {
                     let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
@@ -947,7 +1051,6 @@ fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
     });
     Ok(())
 }
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // ✅ WebView2 Logging deaktivieren (muss VOR Builder passieren!)
