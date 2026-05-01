@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
 #[cfg(target_os = "windows")]
@@ -14,6 +14,7 @@ use std::os::windows::process::CommandExt;
 pub struct AppState {
     pub is_downloading: Mutex<bool>,
     pub abort_flag: Mutex<bool>,
+    pub active_download_pids: Arc<Mutex<Vec<u32>>>,
     pub config: Mutex<AppConfig>,
 }
 
@@ -260,6 +261,15 @@ async fn get_playlist_info(
 }
 
 #[tauri::command]
+async fn reset_download_cancel(state: State<'_, AppState>) -> Result<(), String> {
+    let mut abort = state.abort_flag.lock().unwrap();
+    *abort = false;
+    let mut downloading = state.is_downloading.lock().unwrap();
+    *downloading = true;
+    Ok(())
+}
+
+#[tauri::command]
 async fn download_track(
     app: AppHandle,
     request: DownloadRequest,
@@ -281,6 +291,7 @@ async fn download_track(
     let format = request.format.clone();
     let url = request.url.clone();
     let cookies = request.cookies_path.clone();
+    let active_download_pids = state.active_download_pids.clone();
 
     // Determine if audio or video format
     let audio_formats = [
@@ -349,6 +360,11 @@ async fn download_track(
                 return Err(format!("Failed to start yt-dlp: {}", e));
             }
         };
+        let child_id = child.id();
+        {
+            let mut pids = active_download_pids.lock().unwrap();
+            pids.push(child_id);
+        }
 
         if let Some(stdout) = child.stdout.take() {
             let reader = std::io::BufReader::new(stdout);
@@ -429,6 +445,10 @@ async fn download_track(
         }
 
         let status = child.wait();
+        {
+            let mut pids = active_download_pids.lock().unwrap();
+            pids.retain(|pid| *pid != child_id);
+        }
         match status {
             Ok(s) if s.success() => Ok("Success".to_string()),
             Ok(s) => Err(format!(
@@ -450,7 +470,36 @@ async fn cancel_download(state: State<'_, AppState>) -> Result<(), String> {
     *abort = true;
     let mut downloading = state.is_downloading.lock().unwrap();
     *downloading = false;
+
+    let pids = {
+        let mut active = state.active_download_pids.lock().unwrap();
+        let pids = active.clone();
+        active.clear();
+        pids
+    };
+
+    for pid in pids {
+        kill_process_tree(pid);
+    }
+
     Ok(())
+}
+
+fn kill_process_tree(pid: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(0x08000000)
+            .output();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .output();
+    }
 }
 
 #[tauri::command]
@@ -581,15 +630,18 @@ async fn convert_file(app: AppHandle, request: ConvertRequest) -> Result<String,
 async fn install_ffmpeg() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("winget")
-            .args([
-                "install",
-                "--id=Gyan.FFmpeg",
-                "-e",
-                "--silent",
-                "--accept-source-agreements",
-                "--accept-package-agreements",
-            ])
+        let mut cmd = Command::new("winget");
+        cmd.args([
+            "install",
+            "--id=Gyan.FFmpeg",
+            "-e",
+            "--silent",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        ])
+        .creation_flags(0x08000000);
+
+        let output = cmd
             .output()
             .map_err(|e| format!("winget not available: {}", e))?;
 
@@ -634,15 +686,18 @@ async fn install_ytdlp() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         // Install or upgrade yt-dlp using winget
-        let output = Command::new("winget")
-            .args([
-                "install",
-                "--id=yt-dlp.yt-dlp",
-                "-e",
-                "--silent",
-                "--accept-source-agreements",
-                "--accept-package-agreements",
-            ])
+        let mut cmd = Command::new("winget");
+        cmd.args([
+            "install",
+            "--id=yt-dlp.yt-dlp",
+            "-e",
+            "--silent",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        ])
+        .creation_flags(0x08000000);
+
+        let output = cmd
             .output()
             .map_err(|e| format!("winget not available: {}", e))?;
 
@@ -846,6 +901,7 @@ pub fn run() {
             load_config,
             save_config,
             read_clipboard_text,
+            reset_download_cancel,
             check_system,
             get_playlist_info,
             download_track,

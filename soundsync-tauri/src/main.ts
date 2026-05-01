@@ -548,6 +548,8 @@ async function startDownload() {
   log(_("analyzing_url"), "info");
 
   try {
+    await invoke("reset_download_cancel");
+
     // Step 1: Get playlist info
     const info = await invoke<PlaylistInfo>("get_playlist_info", {
       url,
@@ -599,6 +601,10 @@ async function startDownload() {
             if (stat) stat.textContent = "✅";
           }
         } catch (e) {
+          if (!isDownloading) {
+            if (card) card.classList.remove("active");
+            return;
+          }
           log(`❌ ${entry.title}: ${e}`, "error");
           if (card) {
             const bar = card.querySelector(".track-progress-bar") as HTMLElement;
@@ -609,6 +615,7 @@ async function startDownload() {
         }
 
         if (card) card.classList.remove("active");
+        if (!isDownloading) return;
         completedTracks++;
         updateTotalProgress();
       })();
