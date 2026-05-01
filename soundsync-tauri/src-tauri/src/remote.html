@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoundSync Remote</title>
+    <style>
+        body {
+            font-family: -apple-system, system-ui, sans-serif;
+            background: #0a0a0f;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background: #1a1a24;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+        h1 { font-size: 24px; margin-bottom: 10px; color: #8e7cf3; }
+        p { color: #8888a0; font-size: 14px; margin-bottom: 20px; }
+        input {
+            width: 100%;
+            padding: 15px;
+            background: #22222e;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            margin-bottom: 20px;
+            outline: none;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #8e7cf3;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:active { transform: scale(0.95); }
+        .success { color: #2ecc71; margin-top: 15px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SoundSync Remote</h1>
+        <p>Sende einen Link an deinen PC</p>
+        <input type="text" id="url-input" placeholder="YouTube oder SoundCloud Link..." />
+        <button onclick="sendUrl()">Senden</button>
+        <div id="status" class="success">Gesendet! ✅</div>
+    </div>
+
+    <script>
+        async function sendUrl() {
+            const input = document.getElementById("url-input");
+            const status = document.getElementById("status");
+            const url = input.value.trim();
+            if (!url) return;
+
+            try {
+                const response = await fetch("/send", {
+                    method: "POST",
+                    body: url
+                });
+                if (response.ok) {
+                    input.value = "";
+                    status.style.display = "block";
+                    setTimeout(() => status.style.display = "none", 3000);
+                }
+            } catch (e) {
+                alert("Fehler beim Senden!");
+            }
+        }
+    </script>
+</body>
+</html>

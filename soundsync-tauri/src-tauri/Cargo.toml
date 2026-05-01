@@ -1,6 +1,6 @@
 [package]
 name = "SoundSync-Downloader"
-version = "2.0.1"
+version = "2.1.0"
 description = "SoundSync Downloader – YouTube & SoundCloud Downloader"
 authors = ["Malionaro"]
 edition = "2021"
@@ -23,6 +23,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 arboard = "3"
+discord-rich-presence = "1.1.0"
+tiny_http = "0.12"
+local-ip-address = "0.5"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"

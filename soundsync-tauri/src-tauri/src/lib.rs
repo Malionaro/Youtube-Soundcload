@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
+use std::thread;
+use tiny_http::{Server, Response, Method};
+use local_ip_address::local_ip;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -16,6 +19,12 @@ pub struct AppState {
     pub abort_flag: Mutex<bool>,
     pub active_download_pids: Arc<Mutex<Vec<u32>>>,
     pub config: Mutex<AppConfig>,
+    pub discord_client: Mutex<Option<DiscordClient>>,
+}
+
+pub struct DiscordClient {
+    pub client: discord_rich_presence::DiscordIpcClient,
+    pub start_time: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +36,10 @@ pub struct AppConfig {
     pub disable_changelog: bool,
     #[serde(default = "default_auto_url_detection")]
     pub auto_url_detection: bool,
+    #[serde(default)]
+    pub discord_rpc: bool,
+    pub accent_color: Option<String>,
+    pub custom_background: Option<String>,
 }
 
 fn default_auto_url_detection() -> bool {
@@ -42,6 +55,9 @@ impl Default for AppConfig {
             language: "en".to_string(),
             disable_changelog: false,
             auto_url_detection: true,
+            discord_rpc: false,
+            accent_color: None,
+            custom_background: None,
         }
     }
 }
@@ -153,6 +169,64 @@ fn save_config(state: State<AppState>, config: AppConfig) -> Result<(), String> 
 fn read_clipboard_text() -> Result<String, String> {
     let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
     clipboard.get_text().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn update_discord_presence(
+    state: State<'_, AppState>,
+    details: String,
+    state_msg: String,
+) -> Result<(), String> {
+    use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
+
+    let discord_rpc_enabled = {
+        state.config.lock().unwrap().discord_rpc
+    };
+
+    if !discord_rpc_enabled {
+        // If disabled, ensure client is closed
+        let mut client_lock = state.discord_client.lock().unwrap();
+        if let Some(mut client) = client_lock.take() {
+            let _ = client.client.close();
+        }
+        return Ok(());
+    }
+
+    let mut client_lock = state.discord_client.lock().unwrap();
+
+    // Initialize if needed
+    if client_lock.is_none() {
+        // DiscordIpcClient::new returns the client directly, not a Result
+        let mut client = DiscordIpcClient::new("1334907994863079434");
+        if let Err(e) = client.connect() {
+            return Err(e.to_string());
+        }
+
+        let start_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        *client_lock = Some(DiscordClient { client, start_time });
+    }
+
+    if let Some(discord) = client_lock.as_mut() {
+        use discord_rich_presence::activity;
+
+        let assets = activity::Assets::new().large_image("logo");
+        let activity = activity::Activity::new()
+            .details(&details)
+            .state(&state_msg)
+            .assets(assets)
+            .timestamps(activity::Timestamps::new().start(discord.start_time));
+
+        if let Err(e) = discord.client.set_activity(activity) {
+            *client_lock = None; // Reset the client on error so it can reconnect next time
+            return Err(e.to_string());
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -372,6 +446,7 @@ async fn download_track(
         if let Some(stdout) = child.stdout.take() {
             let reader = std::io::BufReader::new(stdout);
             let mut current_title = track_title.clone();
+            let mut _final_path = String::new();
 
             for line in reader.lines() {
                 if let Ok(line) = line {
@@ -379,13 +454,28 @@ async fn download_track(
 
                     // Parse download destination
                     if trimmed.starts_with("[download] Destination:") {
-                        current_title = trimmed
+                        _final_path = trimmed
                             .replace("[download] Destination:", "")
                             .trim()
                             .to_string();
-                        if let Some(name) = std::path::Path::new(&current_title).file_stem() {
+                        if let Some(name) = std::path::Path::new(&_final_path).file_stem() {
                             current_title = name.to_string_lossy().to_string();
                         }
+                    } else if trimmed.starts_with("[ExtractAudio] Destination:") {
+                        _final_path = trimmed
+                            .replace("[ExtractAudio] Destination:", "")
+                            .trim()
+                            .to_string();
+                    }
+                    
+                    // Also check for existing file
+                    if trimmed.contains("has already been downloaded") {
+                         // Extract path between [download] and has already...
+                         if let Some(start) = trimmed.find(" ") {
+                             if let Some(end) = trimmed.find(" has already") {
+                                 _final_path = trimmed[start..end].trim().to_string();
+                             }
+                         }
                     }
 
                     // Parse progress
@@ -812,12 +902,58 @@ use tauri::{
 };
 
 // Icon updated: 2026-05-01
+#[tauri::command]
+fn ss_get_local_ip() -> Result<String, String> {
+    local_ip().map(|ip| ip.to_string()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
+    let server_handle = app.clone();
+    thread::spawn(move || {
+        let ip = local_ip().unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)));
+        let addr = format!("{}:3030", ip);
+        
+        let server = match Server::http(&addr) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+
+        for mut request in server.incoming_requests() {
+            match (request.method(), request.url()) {
+                (&Method::Get, "/") => {
+                    let html = include_str!("remote.html");
+                    let response = Response::from_string(html)
+                        .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..]).unwrap());
+                    let _ = request.respond(response);
+                }
+                (&Method::Post, "/send") => {
+                    let mut content = String::new();
+                    let _ = request.as_reader().read_to_string(&mut content);
+                    // content is expected to be simple URL or JSON
+                    let url = content.trim().to_string();
+                    if !url.is_empty() {
+                        let _ = server_handle.emit("remote-url-received", url);
+                        let _ = request.respond(Response::from_string("OK"));
+                    } else {
+                        let _ = request.respond(Response::from_string("Empty URL").with_status_code(400));
+                    }
+                }
+                _ => {
+                    let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
+                }
+            }
+        }
+    });
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // ✅ WebView2 Logging deaktivieren (muss VOR Builder passieren!)
     std::env::set_var(
         "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-        "--disable-logging --log-level=3"
+        "--disable-logging --log-level=3",
     );
 
     tauri::Builder::default()
@@ -884,6 +1020,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            let _ = ss_start_remote_server(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -913,6 +1050,9 @@ pub fn run() {
             install_ffmpeg,
             install_ytdlp,
             open_folder,
+            update_discord_presence,
+            ss_get_local_ip,
+            ss_start_remote_server
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

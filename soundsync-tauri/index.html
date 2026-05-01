@@ -20,7 +20,7 @@
           <img src="/src/assets/logo.png" alt="Logo" width="28" height="28" style="border-radius: 6px;" />
         </div>
         <h1 id="app-title">SoundSync Downloader</h1>
-        <span class="version-badge" id="version-badge">v2.0.1</span>
+        <span class="version-badge" id="version-badge">v2.1.0</span>
       </div>
       <div class="header-right">
         <select id="language-select" class="language-select">
@@ -39,6 +39,11 @@
         <button id="system-check-btn" class="icon-btn" title="System Check">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </button>
+        <button id="settings-btn" class="icon-btn" title="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
       </div>
@@ -184,6 +189,7 @@
             <p id="no-downloads-text">Noch keine Downloads</p>
           </div>
         </div>
+
         <button id="scroll-to-current-btn" class="btn btn-secondary btn-full" data-i18n="scroll_to_current">
           Zum aktuellen Titel scrollen
         </button>
@@ -300,6 +306,97 @@
               <span id="ytdlp-status">Prüfe...</span>
             </div>
             <button id="install-ytdlp-btn" class="btn btn-small btn-primary" style="display:none">Installieren</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ═══ SETTINGS MODAL ═══ -->
+    <div class="modal-overlay" id="settings-modal" style="display:none">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="settings-modal-title">⚙️ Einstellungen</h2>
+          <button class="modal-close" id="settings-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-list">
+            <div class="setting-item">
+              <div class="setting-info">
+                <strong id="setting-rpc-title">Discord Rich Presence</strong>
+                <span id="setting-rpc-desc">Zeige deinen aktuellen Download-Status in Discord an.</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="discord-rpc-toggle" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+
+            <div class="setting-item separator">
+              <div class="setting-info">
+                <strong data-i18n="design_theme">Design & Theme</strong>
+                <span data-i18n="theme_desc">Passe die Akzentfarbe und den Hintergrund an</span>
+              </div>
+              <div class="theme-controls">
+                 <input type="color" id="accent-color-picker" value="#8e7cf3" class="color-picker" />
+                 <button id="reset-theme-btn" class="btn btn-small btn-secondary">Reset</button>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <strong data-i18n="custom_bg">Hintergrundbild</strong>
+                <span data-i18n="bg_desc">Wähle ein eigenes Bild für den Glaseffekt</span>
+              </div>
+              <button id="bg-browse-btn" class="btn btn-small btn-secondary">Wählen</button>
+            </div>
+
+            <div class="setting-item separator">
+              <div class="setting-info">
+                <strong id="setting-clipboard-title">Auto-URL Erkennung</strong>
+                <span id="setting-clipboard-desc">Erkennt automatisch Links in der Zwischenablage.</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="settings-auto-url-toggle" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <strong id="setting-changelog-title">Changelog deaktivieren</strong>
+                <span id="setting-changelog-desc">Zeigt keine Update-Benachrichtigungen mehr an.</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="disable-changelog-toggle" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+
+            <div class="setting-item separator remote-section">
+              <div class="setting-info">
+                <strong data-i18n="remote_control">Fernsteuerung (Beta)</strong>
+                <span data-i18n="remote_desc">Scanne den Code, um Links vom Handy zu senden</span>
+              </div>
+              <div id="qr-container" class="qr-container">
+                <div id="qr-placeholder" class="qr-placeholder">
+                  <span>Lade QR...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="version-info-section">
+            <div class="version-header">
+               <span id="current-version-text">Aktuelle Version: 2.1.0</span>
+               <span id="update-status-tag" class="status-tag">Aktuell</span>
+            </div>
+            <button id="check-update-btn" class="btn btn-secondary btn-full">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Auf Updates prüfen
+            </button>
+          </div>
+          
+          <div class="modal-footer-actions">
+            <button id="save-settings-btn" class="btn btn-primary btn-full">Speichern & Schließen</button>
           </div>
         </div>
       </div>
