@@ -113,7 +113,7 @@ async function init() {
   setupTauriListeners();
   if (config.auto_url_detection) startClipboardWatcher();
   checkSystem();
-  log("🎵 SoundSync Downloader v2.0.0 ready", "success");
+  log("🎵 SoundSync Downloader v2.0.1 ready", "success");
 }
 
 // ─── UI Update ───────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ function updateUI() {
   $("sidebar-title").textContent = _("downloaded_tracks");
   $("scroll-to-current-btn").textContent = _("scroll_to_current");
   $("status-text").textContent = _("ready");
-  $("footer-version").textContent = _("version", { version: "2.0.0" });
+  $("footer-version").textContent = _("version", { version: "2.0.1" });
   $("no-downloads-text").textContent = _("no_downloads_yet");
   const dragDropText = maybeElement("drag-drop-text");
   if (dragDropText) dragDropText.textContent = _("drag_drop_hint");
