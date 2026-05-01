@@ -221,15 +221,15 @@ async function checkForUpdates(manual: boolean = false) {
     if (!response.ok) throw new Error("GitHub API unreachable");
     
     const data = await response.json();
-    const latestVersion = data.tag_name.replace("v", "");
+    const latestVersion = data.tag_name.replace(/^v/i, "");
 
     // Simple semver check
     const isNewer = (v1: string, v2: string) => {
-      const parts1 = v1.split('.').map(Number);
-      const parts2 = v2.split('.').map(Number);
+      const parts1 = v1.split('.').map(p => parseInt(p, 10));
+      const parts2 = v2.split('.').map(p => parseInt(p, 10));
       for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-        const a = parts1[i] || 0;
-        const b = parts2[i] || 0;
+        const a = isNaN(parts1[i]) ? 0 : parts1[i];
+        const b = isNaN(parts2[i]) ? 0 : parts2[i];
         if (a > b) return true;
         if (a < b) return false;
       }
@@ -738,6 +738,39 @@ function setupTauriListeners() {
     $("convert-status-text").className = "status-text error";
     $("modal-progress-container").style.display = "none";
     log(`❌ Conversion: ${event.payload}`, "error");
+  });
+
+  listen<{ url: string; format?: string; autoStart?: boolean }>("remote-url-received", (event) => {
+    const p = event.payload;
+    console.log("RECEIVED REMOTE PAYLOAD", p);
+    
+    // TEMPORARY DEBUG ALERT: 
+    alert(`Link empfangen: ${p.url}`);
+
+    urlInput.value = p.url || "";
+    
+    if (p.format) {
+      if (p.format === "audio") {
+        formatSelect.value = "mp3";
+      } else if (p.format === "video") {
+        formatSelect.value = "mp4";
+      } else {
+        formatSelect.value = p.format;
+      }
+      formatSelect.dispatchEvent(new Event("change"));
+    }
+
+    updateDownloadBtnState();
+    log(`📱 Link vom Gerät empfangen: ${p.url}`, "success");
+
+    if (p.autoStart) {
+      if (!downloadBtn.disabled && !isDownloading) {
+        log(`🚀 Automatischer Download gestartet...`, "info");
+        startDownload();
+      } else {
+        log(`⚠️ Auto-Start abgebrochen: Ordner fehlt oder Download läuft bereits.`, "warning");
+      }
+    }
   });
 }
 

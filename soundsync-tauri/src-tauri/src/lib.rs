@@ -1046,10 +1046,14 @@ fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
                     let _ = request.as_reader().read_to_string(&mut content);
 
                     if let Ok(payload) = serde_json::from_str::<RemotePayload>(&content) {
-                        let _ = server_handle.emit("remote-url-received", payload);
+                        println!("Remote API received valid payload: {:?}", payload);
+                        if let Err(e) = server_handle.emit_to("main", "remote-url-received", payload) {
+                            println!("Failed to emit event to main window: {:?}", e);
+                        }
                         let _ = request.respond(Response::from_string("OK")
                             .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap()));
                     } else {
+                        println!("Remote API failed to parse JSON, falling back to simple text. Content: {}", content);
                         // Fallback for simple string URL
                         let url = content.trim().to_string();
                         if !url.is_empty() {
@@ -1058,7 +1062,9 @@ fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
                                 format: None,
                                 auto_start: None,
                             };
-                            let _ = server_handle.emit("remote-url-received", payload);
+                            if let Err(e) = server_handle.emit_to("main", "remote-url-received", payload.clone()) {
+                                println!("Failed to emit event (fallback) to main window: {:?}", e);
+                            }
                             let _ = request.respond(Response::from_string("OK")
                                 .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap()));
                         } else {
