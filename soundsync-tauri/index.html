@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="de" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SoundSync Downloader</title>
+    <meta name="description" content="SoundSync Downloader – YouTube & SoundCloud Downloader with format conversion" />
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <!-- ═══ HEADER ═══ -->
+    <header id="app-header">
+      <div class="header-left">
+        <div class="logo-icon" id="logo-icon">
+          <img src="/src/assets/logo.png" alt="Logo" width="28" height="28" style="border-radius: 6px;" />
+        </div>
+        <h1 id="app-title">SoundSync Downloader</h1>
+        <span class="version-badge" id="version-badge">v2.0.0</span>
+      </div>
+      <div class="header-right">
+        <select id="language-select" class="language-select">
+          <option value="de">Deutsch</option>
+          <option value="en">English</option>
+          <option value="pl">Polski</option>
+        </select>
+        <button id="theme-toggle" class="icon-btn" title="Toggle Theme">
+          <svg id="theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg id="theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
+            <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+        </button>
+        <button id="system-check-btn" class="icon-btn" title="System Check">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ═══ MAIN LAYOUT ═══ -->
+    <main id="app-main">
+      <!-- LEFT: Controls + Progress + Log -->
+      <section class="main-panel">
+
+        <!-- URL Input -->
+        <div class="card" id="url-card">
+          <div class="url-card-header">
+            <label class="input-label" id="url-label" for="url-input">YouTube oder SoundCloud URL:</label>
+            <label class="toggle-setting" title="YouTube/SoundCloud-Links aus der Zwischenablage erkennen">
+              <input type="checkbox" id="auto-url-toggle" checked />
+              <span class="toggle-track"></span>
+              <span>Auto-Erkennung</span>
+            </label>
+          </div>
+          <div class="input-row">
+            <div class="input-wrapper">
+              <input type="text" id="url-input" class="text-input url-input" placeholder="https://www.youtube.com/... oder https://soundcloud.com/..." autocomplete="off" />
+              <button id="clear-url-btn" class="clear-btn" title="Clear">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Row -->
+        <div class="card settings-row">
+          <div class="setting-group">
+            <label class="input-label" id="folder-label">Zielordner:</label>
+            <div class="input-row">
+              <input type="text" id="folder-input" class="text-input" placeholder="Wählen Sie einen Speicherort..." readonly />
+              <button id="browse-btn" class="btn btn-secondary" data-i18n="browse">Durchsuchen</button>
+              <button id="open-folder-btn" class="icon-btn small" title="Open Folder">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="setting-group compact">
+            <label class="input-label" id="format-label">Format:</label>
+            <select id="format-select" class="select-input">
+              <option value="mp3" selected>mp3</option>
+              <option value="m4a">m4a</option>
+              <option value="wav">wav</option>
+              <option value="flac">flac</option>
+              <option value="aac">aac</option>
+              <option value="ogg">ogg</option>
+              <option value="opus">opus</option>
+              <option value="wma">wma</option>
+              <option value="alac">alac</option>
+              <option value="aiff">aiff</option>
+              <optgroup label="Video">
+                <option value="mp4">mp4</option>
+                <option value="webm">webm</option>
+                <option value="mkv">mkv</option>
+                <option value="avi">avi</option>
+                <option value="mov">mov</option>
+                <option value="flv">flv</option>
+                <option value="wmv">wmv</option>
+                <option value="3gp">3gp</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="setting-group">
+            <label class="input-label" id="cookies-label">Cookies:</label>
+            <div class="input-row">
+              <input type="text" id="cookies-input" class="text-input" placeholder="Pfad zu cookies.txt" readonly />
+              <button id="cookies-btn" class="btn btn-secondary" data-i18n="select">Auswählen</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="card button-row">
+          <button id="download-btn" class="btn btn-primary btn-lg" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span id="download-btn-text">Download starten</span>
+          </button>
+          <button id="cancel-btn" class="btn btn-danger" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <span id="cancel-btn-text">Abbrechen</span>
+          </button>
+          <button id="convert-btn" class="btn btn-accent">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+            <span id="convert-btn-text">Datei konvertieren</span>
+          </button>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="card progress-section" id="progress-section">
+          <div class="progress-item">
+            <div class="progress-header">
+              <span class="progress-title" id="progress-label">Bereit zum Starten</span>
+              <span class="progress-value" id="progress-percent"></span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar" id="download-progress" style="width: 0%"></div>
+            </div>
+          </div>
+          <div class="progress-item">
+            <div class="progress-header">
+              <span class="progress-title" id="convert-label">Konvertierung: Wartend...</span>
+              <span class="progress-value" id="convert-percent"></span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar convert" id="convert-progress" style="width: 0%"></div>
+            </div>
+          </div>
+          <div class="progress-item">
+            <div class="progress-header">
+              <span class="progress-title" id="total-progress-label">Gesamtfortschritt: 0% | ETA: --:--:--</span>
+              <span class="progress-value" id="total-percent"></span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar total" id="total-progress" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log Output -->
+        <div class="card log-section" id="log-section">
+          <div class="log-header">
+            <span class="log-title" id="log-title">Aktivitätsprotokoll:</span>
+            <div class="log-actions">
+              <input type="text" id="log-search" class="text-input small" placeholder="Logs durchsuchen..." />
+              <button id="clear-log-btn" class="btn btn-small btn-secondary" data-i18n="clear_log">Log leeren</button>
+            </div>
+          </div>
+          <div class="log-output" id="log-output"></div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <h2 class="sidebar-title" id="sidebar-title">Heruntergeladene Titel:</h2>
+        <div class="track-list" id="track-list">
+          <div class="empty-state" id="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+              <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+            </svg>
+            <p id="no-downloads-text">Noch keine Downloads</p>
+          </div>
+        </div>
+        <button id="scroll-to-current-btn" class="btn btn-secondary btn-full" data-i18n="scroll_to_current">
+          Zum aktuellen Titel scrollen
+        </button>
+      </aside>
+    </main>
+
+    <!-- ═══ STATUSBAR ═══ -->
+    <footer id="app-footer">
+      <div class="status-left">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Bereit</span>
+      </div>
+      <div class="status-right">
+        <a id="github-link" href="https://github.com/Malionaro/Johann-Youtube-Soundcload" target="_blank" class="footer-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <span id="footer-version">Version: 2.0.0</span>
+      </div>
+    </footer>
+
+    <div class="detected-url-banner" id="detected-url-banner" style="display:none">
+      <div class="detected-url-copy">
+        <strong>Link erkannt</strong>
+        <span>URL in SoundSync übernehmen?</span>
+        <small id="detected-url-text"></small>
+      </div>
+      <div class="detected-url-actions">
+        <button id="detected-url-use" class="btn btn-small btn-primary">Übernehmen</button>
+        <button id="detected-url-dismiss" class="btn btn-small btn-secondary">Ignorieren</button>
+      </div>
+    </div>
+
+    <!-- ═══ CONVERSION MODAL ═══ -->
+    <div class="modal-overlay" id="convert-modal" style="display:none">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="modal-convert-title">🔧 Dateikonvertierung</h2>
+          <button class="modal-close" id="convert-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="input-label" id="modal-file-label">Datei auswählen:</label>
+            <div class="input-row">
+              <input type="text" id="convert-file-input" class="text-input" placeholder="Wählen Sie eine Datei..." readonly />
+              <button id="convert-browse-btn" class="btn btn-secondary">Durchsuchen</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="input-label" id="modal-format-label">Zielformat:</label>
+              <select id="convert-format-select" class="select-input">
+                <optgroup label="Audio">
+                  <option value="mp3" selected>mp3</option>
+                  <option value="wav">wav</option>
+                  <option value="flac">flac</option>
+                  <option value="m4a">m4a</option>
+                  <option value="ogg">ogg</option>
+                  <option value="aac">aac</option>
+                </optgroup>
+                <optgroup label="Video">
+                  <option value="mp4">mp4</option>
+                  <option value="avi">avi</option>
+                  <option value="mov">mov</option>
+                  <option value="mkv">mkv</option>
+                  <option value="flv">flv</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="input-label" id="modal-quality-label">Qualität:</label>
+              <select id="convert-quality-select" class="select-input">
+                <option value="low">Niedrig</option>
+                <option value="medium">Mittel</option>
+                <option value="high" selected>Hoch</option>
+                <option value="max">Maximal</option>
+              </select>
+            </div>
+          </div>
+          <button id="start-convert-btn" class="btn btn-accent btn-lg btn-full">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg>
+            <span id="start-convert-text">Konvertierung starten</span>
+          </button>
+          <div class="convert-status">
+            <span id="convert-status-text" class="status-text success">Bereit zur Konvertierung</span>
+            <div class="progress-bar-container modal-progress" id="modal-progress-container" style="display:none">
+              <div class="progress-bar accent" id="modal-convert-progress" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SYSTEM CHECK MODAL ═══ -->
+    <div class="modal-overlay" id="system-modal" style="display:none">
+      <div class="modal small">
+        <div class="modal-header">
+          <h2 id="system-modal-title">🛡️ Systemprüfung</h2>
+          <button class="modal-close" id="system-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="check-item" id="ffmpeg-check">
+            <div class="check-icon loading">⏳</div>
+            <div class="check-info">
+              <strong>FFmpeg</strong>
+              <span id="ffmpeg-status">Prüfe...</span>
+            </div>
+            <button id="install-ffmpeg-btn" class="btn btn-small btn-primary" style="display:none">Installieren</button>
+          </div>
+          <div class="check-item" id="ytdlp-check">
+            <div class="check-icon loading">⏳</div>
+            <div class="check-info">
+              <strong>yt-dlp</strong>
+              <span id="ytdlp-status">Prüfe...</span>
+            </div>
+            <button id="install-ytdlp-btn" class="btn btn-small btn-primary" style="display:none">Installieren</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
