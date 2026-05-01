@@ -90,6 +90,7 @@ const trackList = $("track-list");
 const downloadProgress = $("download-progress") as HTMLElement;
 const convertProgress = $("convert-progress") as HTMLElement;
 const totalProgress = $("total-progress") as HTMLElement;
+const maybeElement = (id: string) => document.getElementById(id);
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 async function init() {
@@ -139,7 +140,8 @@ function updateUI() {
   $("status-text").textContent = _("ready");
   $("footer-version").textContent = _("version", { version: "2.0.0" });
   $("no-downloads-text").textContent = _("no_downloads_yet");
-  $("drag-drop-text").textContent = _("drag_drop_hint");
+  const dragDropText = maybeElement("drag-drop-text");
+  if (dragDropText) dragDropText.textContent = _("drag_drop_hint");
   $("log-search").setAttribute("placeholder", _("search_placeholder"));
   ($("auto-url-toggle") as HTMLInputElement).checked = config.auto_url_detection;
 }
@@ -302,22 +304,24 @@ function setupEventListeners() {
   });
 
   // Drag and drop
-  const dropZone = $("drag-drop-zone");
-  dropZone.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    dropZone.classList.add("drag-over");
-  });
-  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
-  dropZone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dropZone.classList.remove("drag-over");
-    const text = e.dataTransfer?.getData("text/plain");
-    if (text && (text.includes("youtube") || text.includes("soundcloud") || text.includes("youtu.be"))) {
-      urlInput.value = text;
-      updateDownloadBtnState();
-      log(`📋 URL dropped: ${text}`, "info");
-    }
-  });
+  const dropZone = maybeElement("drag-drop-zone");
+  if (dropZone) {
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropZone.classList.add("drag-over");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const text = e.dataTransfer?.getData("text/plain");
+      if (text && (text.includes("youtube") || text.includes("soundcloud") || text.includes("youtu.be"))) {
+        urlInput.value = text;
+        updateDownloadBtnState();
+        log(`📋 URL dropped: ${text}`, "info");
+      }
+    });
+  }
 
   // Keyboard shortcuts
   document.addEventListener("keydown", (e) => {
