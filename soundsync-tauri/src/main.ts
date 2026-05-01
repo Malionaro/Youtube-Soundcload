@@ -152,7 +152,7 @@ function setupEventListeners() {
   urlInput.addEventListener("input", updateDownloadBtnState);
   $("auto-url-toggle").addEventListener("change", (e) => {
     config.auto_url_detection = (e.target as HTMLInputElement).checked;
-    saveConfig();
+    void saveConfig();
     if (config.auto_url_detection) {
       startClipboardWatcher();
       log("Automatische URL-Erkennung aktiviert", "success");
@@ -176,7 +176,7 @@ function setupEventListeners() {
     if (folder) {
       config.download_folder = folder as string;
       folderInput.value = config.download_folder;
-      saveConfig();
+      void saveConfig();
       log(`✅ Folder set: ${config.download_folder}`, "success");
       updateDownloadBtnState();
     }
@@ -198,7 +198,7 @@ function setupEventListeners() {
     if (file) {
       config.cookies_path = file as string;
       cookiesInput.value = config.cookies_path;
-      saveConfig();
+      void saveConfig();
       log(`🍪 Cookies: ${config.cookies_path}`, "info");
     }
   });
@@ -232,7 +232,7 @@ function setupEventListeners() {
       currentLang = lang;
       t = translations[lang];
       config.language = lang;
-      saveConfig();
+      void saveConfig();
       updateUI();
       log(`🌐 Language: ${lang}`, "info");
     }
@@ -877,6 +877,7 @@ async function saveConfig() {
     await invoke("save_config", { config });
   } catch (e) {
     console.error("Failed to save config:", e);
+    log(`Config konnte nicht gespeichert werden: ${e}`, "warning");
   }
 }
 

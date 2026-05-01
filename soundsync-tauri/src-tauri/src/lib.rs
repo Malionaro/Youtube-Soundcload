@@ -139,6 +139,9 @@ fn load_config(state: State<AppState>) -> Result<AppConfig, String> {
 #[tauri::command]
 fn save_config(state: State<AppState>, config: AppConfig) -> Result<(), String> {
     let config_path = get_config_path();
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&config_path, json).map_err(|e| e.to_string())?;
     let mut state_config = state.config.lock().unwrap();
