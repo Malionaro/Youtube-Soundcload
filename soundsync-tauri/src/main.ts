@@ -362,6 +362,14 @@ function setupEventListeners() {
   on("url-input", "input", updateDownloadBtnState);
   on("auto-url-toggle", "change", (e) => {
     config.auto_url_detection = (e.target as HTMLInputElement).checked;
+    if (config.auto_url_detection) {
+      startClipboardWatcher();
+      log("Automatische URL-Erkennung aktiviert", "success");
+    } else {
+      stopClipboardWatcher();
+      hideDetectedUrlPrompt();
+      log("Automatische URL-Erkennung deaktiviert", "warning");
+    }
     saveConfig();
   });
 
@@ -420,6 +428,14 @@ function setupEventListeners() {
     // Update main toggle if changed
     const mainToggle = document.getElementById("auto-url-toggle") as HTMLInputElement;
     if (mainToggle) mainToggle.checked = config.auto_url_detection;
+    
+    // Start/stop clipboard watcher based on new setting
+    if (config.auto_url_detection) {
+      startClipboardWatcher();
+    } else {
+      stopClipboardWatcher();
+      hideDetectedUrlPrompt();
+    }
     
     await saveConfig();
     ($("settings-modal") as HTMLElement).style.display = "none";
