@@ -4,7 +4,15 @@ import { listen } from "@tauri-apps/api/event";
 import { open, confirm } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { openUrl, openPath } from "@tauri-apps/plugin-opener";
-import { relaunch } from "@tauri-apps/plugin-process";
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+function debounce<T extends (...args: any[]) => any>(fn: T, ms: number): (...args: Parameters<T>) => void {
+  let timer: number | undefined;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), ms);
+  };
+}
 
 // ─── i18n ────────────────────────────────────────────────────────────────────
 import en from "./i18n/en.json";
@@ -83,6 +91,7 @@ let lastDetectedUrl = "";
 let pendingDetectedUrl = "";
 let appVersion = "0.0.0";
 let selectedConversionFiles: string[] = [];
+let logScrollPending = false;
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
 const $ = (id: string) => (document.getElementById(id) || document.createElement("div")) as HTMLElement;
@@ -241,13 +250,58 @@ async function checkForUpdates(manual: boolean = false) {
       tag.className = "status-tag update-available";
       
       if (manual) {
-        const confirmed = await confirm(`Version ${latestVersion} ist verfügbar. Möchtest du die Download-Seite öffnen?`, {
-          title: "Update verfügbar",
-          kind: "info",
-        });
-        
-        if (confirmed) {
-          await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
+        // Find the installer asset (.msi or .exe)
+        const assets = data.assets || [];
+        const installerAsset = assets.find((a: any) => 
+          a.name.endsWith(".msi") || a.name.endsWith(".exe")
+        );
+
+        if (installerAsset) {
+          const confirmed = await confirm(
+            `Version ${latestVersion} ist verfügbar!\n\nMöchtest du das Update jetzt herunterladen und installieren?\n\nDatei: ${installerAsset.name}`,
+            { title: "Update verfügbar", kind: "info" }
+          );
+          
+          if (confirmed) {
+            tag.textContent = "Lade herunter...";
+            tag.className = "status-tag checking";
+            btn.textContent = "⏬ Wird heruntergeladen...";
+            btn.disabled = true;
+            log(`📥 Update ${latestVersion} wird heruntergeladen...`, "info");
+
+            try {
+              await invoke("download_and_install_update", {
+                downloadUrl: installerAsset.browser_download_url,
+                filename: installerAsset.name,
+              });
+              
+              tag.textContent = "Installiert!";
+              tag.className = "status-tag update-available";
+              log("✅ Installer gestartet – App wird geschlossen...", "success");
+            } catch (installErr) {
+              tag.textContent = "Fehler";
+              tag.className = "status-tag error";
+              log(`❌ Installation fehlgeschlagen: ${installErr}`, "error");
+              
+              // Fallback: Open download page
+              const fallback = await confirm(
+                "Automatische Installation fehlgeschlagen. Möchtest du die Download-Seite öffnen?",
+                { title: "Fehler", kind: "warning" }
+              );
+              if (fallback) {
+                await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
+              }
+            }
+          }
+        } else {
+          // No installer asset found, fallback to opening the page
+          const confirmed = await confirm(
+            `Version ${latestVersion} ist verfügbar. Kein Installer gefunden – möchtest du die Download-Seite öffnen?`,
+            { title: "Update verfügbar", kind: "info" }
+          );
+          if (confirmed) {
+            await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
+          }
         }
       }
     } else {
@@ -264,6 +318,7 @@ async function checkForUpdates(manual: boolean = false) {
     }
   } finally {
     btn.disabled = false;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Auf Updates prüfen`;
   }
 }
 
@@ -346,7 +401,7 @@ function setupEventListeners() {
       filters: [{ name: "Images", extensions: ["jpg", "png", "webp", "jpeg"] }],
     });
     if (file) {
-      config.custom_background = convertFileSrc(file as string);
+      config.custom_background = file as string; // Store raw path, not asset URL
       applyTheme();
       saveConfig();
       log("🖼️ Hintergrundbild aktualisiert", "success");
@@ -742,10 +797,7 @@ function setupTauriListeners() {
 
   listen<{ url: string; format?: string; autoStart?: boolean }>("remote-url-received", (event) => {
     const p = event.payload;
-    console.log("RECEIVED REMOTE PAYLOAD", p);
-    
-    // TEMPORARY DEBUG ALERT: 
-    alert(`Link empfangen: ${p.url}`);
+    console.log("Remote URL received:", p.url);
 
     urlInput.value = p.url || "";
     
@@ -777,7 +829,7 @@ function setupTauriListeners() {
 // ─── Automatic URL Detection ────────────────────────────────────────────────
 function startClipboardWatcher() {
   if (clipboardWatchTimer !== null) return;
-  clipboardWatchTimer = window.setInterval(checkClipboardForMediaUrl, 1500);
+  clipboardWatchTimer = window.setInterval(checkClipboardForMediaUrl, 2500);
   checkClipboardForMediaUrl();
 }
 
@@ -828,16 +880,7 @@ function extractMediaUrl(text: string): string | null {
   return null;
 }
 
-async function fetchSpotifyMetadata(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.title || null;
-  } catch {
-    return null;
-  }
-}
+// fetchSpotifyMetadata removed – was unused dead code
 
 function showDetectedUrlPrompt(url: string) {
   $("detected-url-text").textContent = url;
@@ -1129,7 +1172,21 @@ function log(message: string, type: string = "info") {
   const timestamp = new Date().toLocaleTimeString();
   line.textContent = `[${timestamp}] ${message}`;
   logOutput.appendChild(line);
-  logOutput.scrollTop = logOutput.scrollHeight;
+  
+  // Limit DOM nodes to prevent memory leaks
+  const maxLines = 300;
+  while (logOutput.children.length > maxLines) {
+    logOutput.firstChild?.remove();
+  }
+  
+  // Batch scroll updates with RAF to avoid layout thrashing
+  if (!logScrollPending) {
+    logScrollPending = true;
+    requestAnimationFrame(() => {
+      logOutput.scrollTop = logOutput.scrollHeight;
+      logScrollPending = false;
+    });
+  }
 }
 
 function setStatus(text: string, type: string = "info") {
@@ -1182,10 +1239,12 @@ function updateTotalProgress(currentTrackIndex?: number, trackPercent?: number) 
     eta,
   });
 
-  // Highlight active track card
-  trackList.querySelectorAll(".track-card").forEach((card, idx) => {
-    card.classList.toggle("active", idx === (currentTrackIndex ? currentTrackIndex - 1 : completedTracks));
-  });
+  // Highlight active track card efficiently
+  const activeIdx = currentTrackIndex ? currentTrackIndex : completedTracks + 1;
+  const prevActive = trackList.querySelector(".track-card.active");
+  if (prevActive) prevActive.classList.remove("active");
+  const nextActive = document.getElementById(`track-card-${activeIdx}`);
+  if (nextActive) nextActive.classList.add("active");
 }
 
 function formatTime(seconds: number): string {
@@ -1254,12 +1313,15 @@ function applyTheme() {
   const accent = config.accent_color || "#6c5ce7";
   root.style.setProperty("--accent", accent);
   
-  // Create glow color with opacity
+  // Create derived colors from accent
   const r = parseInt(accent.slice(1, 3), 16);
   const g = parseInt(accent.slice(3, 5), 16);
   const b = parseInt(accent.slice(5, 7), 16);
   root.style.setProperty("--accent-glow", `rgba(${r}, ${g}, ${b}, 0.25)`);
+  root.style.setProperty("--accent-hover", `rgba(${Math.min(255, r + 30)}, ${Math.min(255, g + 30)}, ${Math.min(255, b + 30)}, 1)`);
+  root.style.setProperty("--primary-glow", `rgba(${r}, ${g}, ${b}, 0.3)`);
   
+  // Handle custom background image
   let overlay = document.getElementById("custom-bg-overlay");
   if (config.custom_background) {
     if (!overlay) {
@@ -1268,7 +1330,14 @@ function applyTheme() {
       overlay.className = "custom-bg-overlay";
       document.body.prepend(overlay);
     }
-    overlay.style.backgroundImage = `url('${config.custom_background}')`;
+    // Convert raw file path to asset URL at render time
+    // Guard against already-converted URLs from old config
+    let bgUrl = config.custom_background;
+    if (!bgUrl.startsWith("http") && !bgUrl.startsWith("asset:")) {
+      bgUrl = convertFileSrc(bgUrl);
+    }
+    console.log("[BG] Setting background image:", bgUrl);
+    overlay.style.backgroundImage = `url('${bgUrl}')`;
   } else if (overlay) {
     overlay.remove();
   }
@@ -1312,14 +1381,14 @@ async function updateRemoteStatus() {
   }
 }
 
-async function saveConfig() {
+const saveConfig = debounce(async () => {
   try {
     await invoke("save_config", { config });
   } catch (e) {
     console.error("Failed to save config:", e);
     log(`Config konnte nicht gespeichert werden: ${e}`, "warning");
   }
-}
+}, 500);
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", init);

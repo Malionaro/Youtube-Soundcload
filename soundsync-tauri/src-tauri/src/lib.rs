@@ -594,8 +594,10 @@ async fn download_track(
                         }
                     }
 
-                    // Emit log line
-                    let _ = app_handle.emit("download-log", trimmed.to_string());
+                    // Emit log line (skip frequent progress updates to prevent lag/memory issues)
+                    if !(trimmed.starts_with("[download]") && trimmed.contains('%')) {
+                        let _ = app_handle.emit("download-log", trimmed.to_string());
+                    }
                 }
             }
         }
@@ -1088,6 +1090,72 @@ fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
     });
     Ok(())
 }
+
+// ─── Auto-Update: Download & Install ─────────────────────────────────────────
+#[tauri::command]
+async fn download_and_install_update(
+    app: AppHandle,
+    download_url: String,
+    filename: String,
+) -> Result<String, String> {
+    use std::io::{Read, Write};
+
+    let temp_dir = std::env::temp_dir();
+    let file_path = temp_dir.join(&filename);
+
+    // Download the installer
+    let client = std::thread::spawn(move || -> Result<PathBuf, String> {
+        let resp = ureq::get(&download_url)
+            .call()
+            .map_err(|e| format!("Download failed: {}", e))?;
+
+        let mut file = fs::File::create(&file_path)
+            .map_err(|e| format!("Failed to create file: {}", e))?;
+
+        let mut reader = resp.into_reader();
+        let mut buffer = [0u8; 8192];
+        loop {
+            let bytes_read = reader.read(&mut buffer)
+                .map_err(|e| format!("Read error: {}", e))?;
+            if bytes_read == 0 {
+                break;
+            }
+            file.write_all(&buffer[..bytes_read])
+                .map_err(|e| format!("Write error: {}", e))?;
+        }
+
+        Ok(file_path)
+    }).join().map_err(|_| "Thread panicked".to_string())??;
+
+    // Launch the installer
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let path_str = client.to_string_lossy().to_string();
+        if path_str.ends_with(".msi") {
+            Command::new("msiexec")
+                .args(["/i", &path_str, "/passive"])
+                .creation_flags(0x08000000)
+                .spawn()
+                .map_err(|e| format!("Failed to start installer: {}", e))?;
+        } else {
+            Command::new(&path_str)
+                .creation_flags(0x08000000)
+                .spawn()
+                .map_err(|e| format!("Failed to start installer: {}", e))?;
+        }
+    }
+
+    // Exit the app after a short delay so the installer can replace the files
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        handle.exit(0);
+    });
+
+    Ok("Installer started".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // ✅ WebView2 Logging deaktivieren (muss VOR Builder passieren!)
@@ -1192,7 +1260,8 @@ pub fn run() {
             open_folder,
             update_discord_presence,
             ss_get_local_ip,
-            ss_start_remote_server
+            ss_start_remote_server,
+            download_and_install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

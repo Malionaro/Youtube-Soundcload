@@ -1,3 +1,33 @@
+----------------------------**V2.2.2**----------------------------
+
+**Glassmorphism & Auto-Update Release**
+
+**New Features:**
+- **Auto-Updater:** Click "Auf Updates prüfen" → downloads and installs the update automatically (.msi/.exe). No more manual browser downloads.
+- **Custom Background Image:** Choose your own wallpaper in Settings → it now persists across app restarts.
+- **iOS-Style Toggle Switches:** New toggle design with I/O symbols for clear on/off indication.
+- **Dark Mode Dropdowns:** All select menus now match the dark glass theme — no more white backgrounds.
+
+**UI/UX Improvements:**
+- **Glassmorphism Overhaul:** Frosted glass effects, subtle reflections, and refined backdrop-blur throughout the entire UI.
+- **Dynamic Accent Colors:** The accent color picker now updates all related glow, hover, and shadow colors in real time.
+- **Smoother Animations:** Cards, sidebar, and modals use spring-based cubic-bezier curves for a premium feel.
+- **Custom SVG Dropdown Arrows:** Replaced native browser arrows with sleek, white SVG chevrons.
+- **Version Badge Glow:** The version badge now pulses with a subtle glow animation.
+
+**Performance:**
+- **Debounced Config Saving:** Settings are now saved with a 500ms debounce, preventing IPC spam.
+- **RAF-Based Log Scrolling:** Log output uses `requestAnimationFrame` to avoid layout thrashing during downloads.
+- **Optimized Track Highlighting:** Active track cards are now highlighted via direct ID lookup instead of iterating all cards.
+- **Reduced Clipboard Polling:** Interval increased from 1.5s to 2.5s, reducing CPU overhead by ~40%.
+- **DOM Cleanup:** Log limit reduced from 500 to 300 nodes for smoother rendering.
+
+**Bug Fixes:**
+- Fix: Background image no longer disappears after restarting the app.
+- Fix: Removed debug `alert()` that blocked the UI when receiving remote URLs.
+- Fix: Toggle switches no longer show duplicate white circles in settings.
+- Fix: Removed unused `relaunch` import and dead `fetchSpotifyMetadata` code.
+
 ----------------------------**V2.2.1**----------------------------
 
 **New Features & Performance Update**
