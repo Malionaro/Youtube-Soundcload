@@ -45,6 +45,8 @@ interface AppConfig {
   custom_background?: string;
   format?: string;
   quality?: string;
+  auto_scroll_log?: boolean;
+  eco_mode?: boolean;
 }
 
 interface PlaylistEntry {
@@ -79,6 +81,8 @@ let config: AppConfig = {
   disable_changelog: false,
   auto_url_detection: true,
   discord_rpc: false,
+  auto_scroll_log: true,
+  eco_mode: true,
 };
 
 let isDownloading = false;
@@ -92,6 +96,8 @@ let pendingDetectedUrl = "";
 let appVersion = "0.0.0";
 let selectedConversionFiles: string[] = [];
 let logScrollPending = false;
+let isWindowVisible = true;
+let ecoModeActive = false;
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
 const $ = (id: string) => (document.getElementById(id) || document.createElement("div")) as HTMLElement;
@@ -180,12 +186,17 @@ async function init() {
     updateQualityOptions();
     if (config.quality) qualitySelect.value = config.quality;
 
+    // Apply defaults for new settings
+    if (config.auto_scroll_log === undefined) config.auto_scroll_log = true;
+    if (config.eco_mode === undefined) config.eco_mode = true;
+
     applyTheme();
     if (config.accent_color) {
         ($("accent-color-picker") as HTMLInputElement).value = config.accent_color;
     }
     
     updateRemoteStatus();
+    setupEcoMode();
     
     // Discord RPC Initialisierung
     updateDiscordPresence("Ready to download", "Waiting for URLs...");
@@ -380,6 +391,8 @@ function setupEventListeners() {
     ($("discord-rpc-toggle") as HTMLInputElement).checked = config.discord_rpc;
     ($("settings-auto-url-toggle") as HTMLInputElement).checked = config.auto_url_detection;
     ($("disable-changelog-toggle") as HTMLInputElement).checked = config.disable_changelog;
+    ($("auto-scroll-toggle") as HTMLInputElement).checked = config.auto_scroll_log !== false;
+    ($("eco-mode-toggle") as HTMLInputElement).checked = config.eco_mode !== false;
     ($("accent-color-picker") as HTMLInputElement).value = config.accent_color || "#6c5ce7";
   });
 
@@ -424,6 +437,8 @@ function setupEventListeners() {
     config.discord_rpc = ($("discord-rpc-toggle") as HTMLInputElement).checked;
     config.auto_url_detection = ($("settings-auto-url-toggle") as HTMLInputElement).checked;
     config.disable_changelog = ($("disable-changelog-toggle") as HTMLInputElement).checked;
+    config.auto_scroll_log = ($("auto-scroll-toggle") as HTMLInputElement).checked;
+    config.eco_mode = ($("eco-mode-toggle") as HTMLInputElement).checked;
     
     // Update main toggle if changed
     const mainToggle = document.getElementById("auto-url-toggle") as HTMLInputElement;
@@ -498,17 +513,17 @@ function setupEventListeners() {
     }
   });
 
-  // Browse cookies
+  // Browse cookies – only YouTube-compatible cookies.txt (Netscape format)
   on("cookies-btn", "click", async () => {
     const file = await open({
-      title: _("cookies_label"),
-      filters: [{ name: "Text", extensions: ["txt"] }],
+      title: "YouTube Cookies (cookies.txt / Netscape-Format)",
+      filters: [{ name: "YouTube Cookies (*.txt)", extensions: ["txt"] }],
     });
     if (file) {
       config.cookies_path = file as string;
       cookiesInput.value = config.cookies_path;
       void saveConfig();
-      log(`🍪 Cookies: ${config.cookies_path}`, "info");
+      log(`🍪 YouTube Cookies geladen: ${config.cookies_path}`, "info");
     }
   });
 
@@ -1195,8 +1210,8 @@ function log(message: string, type: string = "info") {
     logOutput.firstChild?.remove();
   }
   
-  // Batch scroll updates with RAF to avoid layout thrashing
-  if (!logScrollPending) {
+  // Auto-scroll only if enabled in settings
+  if (config.auto_scroll_log !== false && !logScrollPending) {
     logScrollPending = true;
     requestAnimationFrame(() => {
       logOutput.scrollTop = logOutput.scrollHeight;
@@ -1260,7 +1275,13 @@ function updateTotalProgress(currentTrackIndex?: number, trackPercent?: number) 
   const prevActive = trackList.querySelector(".track-card.active");
   if (prevActive) prevActive.classList.remove("active");
   const nextActive = document.getElementById(`track-card-${activeIdx}`);
-  if (nextActive) nextActive.classList.add("active");
+  if (nextActive) {
+    nextActive.classList.add("active");
+    // Auto-scroll sidebar to keep current track visible
+    if (config.auto_scroll_log !== false) {
+      nextActive.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }
 }
 
 function formatTime(seconds: number): string {
@@ -1395,6 +1416,58 @@ async function updateRemoteStatus() {
   } catch (e) {
     console.error("Failed to get local IP", e);
   }
+}
+
+// ─── Eco-Mode: Reduce resource usage when window is hidden/minimized ─────────
+function setupEcoMode() {
+  // Listen for window visibility changes
+  document.addEventListener("visibilitychange", () => {
+    isWindowVisible = document.visibilityState === "visible";
+    if (config.eco_mode !== false) {
+      if (!isWindowVisible) {
+        enterEcoMode();
+      } else {
+        exitEcoMode();
+      }
+    }
+  });
+
+  // Also handle window blur/focus for minimized state
+  window.addEventListener("blur", () => {
+    if (config.eco_mode !== false && !isDownloading) {
+      // Only enter full eco-mode if not downloading
+      enterEcoMode();
+    }
+  });
+  window.addEventListener("focus", () => {
+    exitEcoMode();
+  });
+}
+
+function enterEcoMode() {
+  if (ecoModeActive) return;
+  ecoModeActive = true;
+  document.documentElement.classList.add("eco-mode");
+  
+  // Pause clipboard watcher to save CPU
+  if (!isDownloading) {
+    stopClipboardWatcher();
+  }
+  
+  console.log("[ECO] Eco-Mode aktiviert – Hintergrundaktivität reduziert");
+}
+
+function exitEcoMode() {
+  if (!ecoModeActive) return;
+  ecoModeActive = false;
+  document.documentElement.classList.remove("eco-mode");
+  
+  // Resume clipboard watcher if enabled
+  if (config.auto_url_detection) {
+    startClipboardWatcher();
+  }
+  
+  console.log("[ECO] Eco-Mode deaktiviert – Volle Leistung");
 }
 
 const saveConfig = debounce(async () => {

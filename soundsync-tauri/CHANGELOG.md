@@ -1,3 +1,23 @@
+----------------------------**V2.3.0**----------------------------
+
+**Eco-Mode & Performance Optimization**
+
+**New Features:**
+- **🌿 Eco-Mode (Standby):** Reduces CPU/GPU usage when the app is in the background or minimized by pausing animations and clipboard polling.
+- **📜 Auto-Scroll Toggle:** Control whether the log and track list should automatically scroll to the latest entry.
+- **📁 YouTube Cookies Labeling:** Clarified `cookies.txt` usage specifically for YouTube authentication with improved file filtering.
+
+**UI/UX Improvements:**
+- **💡 Light Mode Overhaul:** Complete redesign of the light theme with high-contrast elements, proper shadows, and readable text.
+- **🌙 Dark Mode Overhaul:** Fully consistent glassmorphism with deeper contrast and refined element visibility.
+- **📏 Fixed Track Sizing:** Track cards now maintain a consistent size even with 100+ items (no more shrinking).
+- **🔄 Sidebar Auto-Scroll:** The download list now automatically follows the currently active track.
+
+**Performance & Internal:**
+- **🚀 Terminal Suppression:** The console window no longer flashes or stays open on startup.
+- **⚡ Optimized Polling:** Clipboard watcher now respects the app state and stops when unnecessary.
+- **🛠️ Config Persistence:** New settings (Eco-Mode, Auto-Scroll) are correctly saved and loaded.
+
 ----------------------------**V2.2.2**----------------------------
 
 **Glassmorphism & Auto-Update Release**

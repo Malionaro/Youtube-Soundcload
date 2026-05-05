@@ -8,8 +8,8 @@
   "folder_placeholder": "Select a download location...",
   "browse": "Browse",
   "format_label": "Format:",
-  "cookies_label": "Cookies:",
-  "cookies_placeholder": "Path to cookies.txt",
+  "cookies_label": "YouTube Cookies:",
+  "cookies_placeholder": "Path to YouTube cookies.txt (Netscape format)",
   "select": "Select",
   "start_download": "Start Download",
   "cancel": "Cancel",
@@ -67,5 +67,9 @@
   "system_check": "System Check",
   "all_systems_go": "✅ All systems ready",
   "search_placeholder": "Search logs...",
-  "system_dependencies_missing": "Required system components are missing. Please install them."
+  "system_dependencies_missing": "Required system components are missing. Please install them.",
+  "auto_scroll_log": "Auto-Scroll Log",
+  "auto_scroll_desc": "Automatically scroll to new log entries.",
+  "eco_mode": "Eco-Mode (Standby)",
+  "eco_mode_desc": "Reduces CPU usage when running in the background."
 }

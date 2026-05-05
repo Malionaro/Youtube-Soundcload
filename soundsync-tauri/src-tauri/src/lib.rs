@@ -42,9 +42,17 @@ pub struct AppConfig {
     pub custom_background: Option<String>,
     #[serde(default = "default_quality")]
     pub quality: String,
+    #[serde(default = "default_true")]
+    pub auto_scroll_log: bool,
+    #[serde(default = "default_true")]
+    pub eco_mode: bool,
 }
 
 fn default_auto_url_detection() -> bool {
+    true
+}
+
+fn default_true() -> bool {
     true
 }
 
@@ -65,6 +73,8 @@ impl Default for AppConfig {
             accent_color: None,
             custom_background: None,
             quality: "best".to_string(),
+            auto_scroll_log: true,
+            eco_mode: true,
         }
     }
 }
