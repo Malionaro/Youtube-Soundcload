@@ -268,17 +268,62 @@ fn check_system() -> SystemCheckResult {
     }
 }
 
+async fn resolve_spotify_url(url: &str) -> Result<String, String> {
+    let url_copy = url.to_string();
+    let body = tokio::task::spawn_blocking(move || {
+        ureq::get(&url_copy)
+            .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36)")
+            .call()
+            .map_err(|e| e.to_string())?
+            .into_string()
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    if let Some(start) = body.find("<title>") {
+        if let Some(end) = body[start..].find("</title>") {
+            let mut title = body[start + 7..start + end].to_string();
+            
+            title = title.replace(" | Spotify", "");
+            title = title.replace(" - Spotify", "");
+            title = title.replace(" - song and lyrics by ", " ");
+            title = title.replace(" - song by ", " ");
+            title = title.replace(" - playlist by ", " ");
+            title = title.replace(" - EP by ", " ");
+            title = title.replace(" - album by ", " ");
+            title = title.replace(" - single by ", " ");
+            
+            title = title.replace("&#39;", "'")
+                         .replace("&amp;", "&")
+                         .replace("&quot;", "\"")
+                         .replace("&lt;", "<")
+                         .replace("&gt;", ">");
+                         
+            return Ok(format!("ytsearch1:{}", title.trim()));
+        }
+    }
+    
+    Err("Could not extract title from Spotify page".to_string())
+}
+
 #[tauri::command]
 async fn get_playlist_info(
     url: String,
     cookies_path: Option<String>,
 ) -> Result<PlaylistInfo, String> {
+    let mut resolved_url = url.clone();
+    
+    if resolved_url.contains("spotify.com") {
+        resolved_url = resolve_spotify_url(&resolved_url).await?;
+    }
     let mut args = vec![
         "--flat-playlist".to_string(),
         "--dump-json".to_string(),
         "--no-warnings".to_string(),
         "-i".to_string(),
         "--no-color".to_string(),
+        "--windows-filenames".to_string(),
         "--extractor-args".to_string(),
         "youtube:player_client=android".to_string(),
     ];
@@ -290,7 +335,7 @@ async fn get_playlist_info(
         }
     }
 
-    args.push(url.clone());
+    args.push(resolved_url.clone());
 
     let output = tokio::task::spawn_blocking(move || {
         let mut cmd = Command::new("yt-dlp");
@@ -415,6 +460,7 @@ async fn download_track(
         "--newline".to_string(),
         "--no-color".to_string(),
         "--progress".to_string(),
+        "--windows-filenames".to_string(),
         "-o".to_string(),
         format!("{}/%(title)s.%(ext)s", folder),
         "--extractor-args".to_string(),
@@ -495,6 +541,9 @@ async fn download_track(
             pids.push(child_id);
         }
 
+        let mut downloaded_paths: Vec<String> = Vec::new();
+        let mut already_downloaded = false;
+
         if let Some(stdout) = child.stdout.take() {
             let reader = std::io::BufReader::new(stdout);
             let mut current_title = track_title.clone();
@@ -513,11 +562,24 @@ async fn download_track(
                         if let Some(name) = std::path::Path::new(&_final_path).file_stem() {
                             current_title = name.to_string_lossy().to_string();
                         }
+                        if !downloaded_paths.contains(&_final_path) {
+                            downloaded_paths.push(_final_path.clone());
+                        }
                     } else if trimmed.starts_with("[ExtractAudio] Destination:") {
                         _final_path = trimmed
                             .replace("[ExtractAudio] Destination:", "")
                             .trim()
                             .to_string();
+                        if !downloaded_paths.contains(&_final_path) {
+                            downloaded_paths.push(_final_path.clone());
+                        }
+                    } else if trimmed.starts_with("[Merger] Merging formats into \"") {
+                        let path = trimmed
+                            .replace("[Merger] Merging formats into \"", "");
+                        let path = path.trim_end_matches('"').to_string();
+                        if !downloaded_paths.contains(&path) {
+                            downloaded_paths.push(path);
+                        }
                     }
                     
                     // Also check for existing file
@@ -526,8 +588,12 @@ async fn download_track(
                          if let Some(start) = trimmed.find(" ") {
                              if let Some(end) = trimmed.find(" has already") {
                                  _final_path = trimmed[start..end].trim().to_string();
+                                 if !downloaded_paths.contains(&_final_path) {
+                                     downloaded_paths.push(_final_path.clone());
+                                 }
                              }
                          }
+                         already_downloaded = true;
                          // Emit 100% progress immediately for existing files
                          let progress = DownloadProgress {
                             status: "downloading".to_string(),
@@ -628,6 +694,20 @@ async fn download_track(
             let mut pids = active_download_pids.lock().unwrap();
             pids.retain(|pid| *pid != child_id);
         }
+
+        let is_aborted = {
+            let state_val = app_handle.state::<AppState>();
+            let abort = *state_val.abort_flag.lock().unwrap();
+            abort
+        };
+
+        if is_aborted && !already_downloaded {
+            for path in &downloaded_paths {
+                let _ = std::fs::remove_file(path);
+                let _ = std::fs::remove_file(format!("{}.part", path));
+                let _ = std::fs::remove_file(format!("{}.ytdl", path));
+            }
+        }
         match status {
             Ok(s) if s.success() => Ok("Success".to_string()),
             Ok(s) => Err(format!(
@@ -706,7 +786,12 @@ async fn convert_file(app: AppHandle, request: ConvertRequest) -> Result<String,
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| ".".to_string());
 
-    let output_path = format!("{}/{}_converted.{}", parent, stem, output_format);
+    let input_ext = input_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let output_path = if input_ext.eq_ignore_ascii_case(&output_format) {
+        format!("{}/{}_converted.{}", parent, stem, output_format)
+    } else {
+        format!("{}/{}.{}", parent, stem, output_format)
+    };
 
     let mut args: Vec<String> = vec![
         "-hwaccel".to_string(),

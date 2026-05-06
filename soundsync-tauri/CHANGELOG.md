@@ -1,3 +1,10 @@
+----------------------------**V2.3.1**----------------------------
+
+**Bug Fixes & UX Improvements:**
+- **Filename Fix:** Converted standalone files no longer have a mandatory `_converted` suffix unless necessary.
+- **Filename Fix:** YouTube downloads now use safe Windows filenames to prevent issues with special characters.
+- **UI Fix:** Track cards now have a strictly enforced height, preventing text and thumbnail overlapping when many items are present.
+
 ----------------------------**V2.3.0**----------------------------
 
 **Eco-Mode & Performance Optimization**

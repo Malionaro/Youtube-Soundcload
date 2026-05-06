@@ -211,7 +211,7 @@ body {
 
 .main-panel {
   display: flex; flex-direction: column; gap: 10px;
-  overflow-y: auto; min-height: 0;
+  /*overflow-y: auto;*/ min-height: 0;
 }
 
 /* ═══ Cards ═══ */
@@ -638,6 +638,16 @@ input:checked + .toggle-track::after {
   overflow: hidden;
   animation: sidebarAppear 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   box-shadow: var(--shadow);
+  position: relative;
+}
+
+.sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--glass-reflection);
+  pointer-events: none;
+  opacity: 0.5;
 }
 
 @keyframes sidebarAppear {
@@ -669,9 +679,11 @@ input:checked + .toggle-track::after {
   position: relative;
   cursor: pointer;
   overflow: hidden;
+  height: 88px;
   min-height: 88px;
   flex-shrink: 0;
 }
+
 .track-card::before {
   content: "";
   position: absolute;
@@ -695,11 +707,11 @@ input:checked + .toggle-track::after {
 }
 
 .track-thumb {
-  width: 80px; height: 60px; border-radius: var(--radius-xs);
+  width: 80px; height: 60px; min-width: 80px; min-height: 60px; border-radius: var(--radius-xs);
   object-fit: cover; background: var(--bg-hover); flex-shrink: 0;
 }
 
-.track-info { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.track-info { display: flex; flex-direction: column; justify-content: center; min-width: 0; flex: 1; height: 100%; }
 
 .track-title {
   font-size: 12px; font-weight: 600; color: var(--text-primary);
