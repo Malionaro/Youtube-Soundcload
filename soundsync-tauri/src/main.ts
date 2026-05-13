@@ -621,25 +621,40 @@ function setupEventListeners() {
   });
 
   // Install buttons
-  on("install-ffmpeg-btn", "click", async () => {
+  on("install-ffmpeg-btn", "click", async (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = "⌛ " + _("installing");
     log("🔧 Installing FFmpeg...", "info");
     try {
-      await invoke("install_ffmpeg");
-      log(_("ffmpeg_installed"), "success");
-      checkSystem();
-    } catch (e) {
-      log(`❌ ${e}`, "error");
+      const res = await invoke<string>("install_ffmpeg");
+      log(`✅ ${res}`, "success");
+      await checkSystem();
+      if (res.includes("already installed")) {
+        log("ℹ️ FFmpeg ist bereits installiert, wird aber nicht im System-Pfad gefunden. Bitte starte die App neu.", "warning");
+      }
+    } catch (err) {
+      log(`❌ ${err}`, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "FFmpeg installieren";
     }
   });
 
-  on("install-ytdlp-btn", "click", async () => {
+  on("install-ytdlp-btn", "click", async (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = "⌛ " + _("installing");
     log("🔧 Installing yt-dlp...", "info");
     try {
-      await invoke("install_ytdlp");
-      log(_("ytdlp_installed"), "success");
-      checkSystem();
-    } catch (e) {
-      log(`❌ ${e}`, "error");
+      const res = await invoke<string>("install_ytdlp");
+      log(`✅ ${res}`, "success");
+      await checkSystem();
+    } catch (err) {
+      log(`❌ ${err}`, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "yt-dlp installieren";
     }
   });
 
@@ -1182,14 +1197,6 @@ async function checkSystem(autoShowModal: boolean = true) {
       // Automatically show the system modal if things are missing
       $("system-modal").style.display = "flex";
       log("⚠️ " + _("system_dependencies_missing"), "warning");
-      
-      // Auto trigger installation
-      if (!result.ffmpeg_installed) {
-        $("install-ffmpeg-btn").click();
-      }
-      if (!result.ytdlp_installed) {
-        $("install-ytdlp-btn").click();
-      }
     }
   } catch (e) {
     log(`⚠️ System check failed: ${e}`, "warning");

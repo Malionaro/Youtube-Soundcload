@@ -3,9 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, State};
 use std::thread;
-use tiny_http::{Server, Response, Method};
+use tauri::{AppHandle, Emitter, State};
+use tiny_http::{Method, Response, Server};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -205,9 +205,7 @@ async fn update_discord_presence(
 ) -> Result<(), String> {
     use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
 
-    let discord_rpc_enabled = {
-        state.config.lock().unwrap().discord_rpc
-    };
+    let discord_rpc_enabled = { state.config.lock().unwrap().discord_rpc };
 
     if !discord_rpc_enabled {
         // If disabled, ensure client is closed
@@ -284,7 +282,7 @@ async fn resolve_spotify_url(url: &str) -> Result<String, String> {
     if let Some(start) = body.find("<title>") {
         if let Some(end) = body[start..].find("</title>") {
             let mut title = body[start + 7..start + end].to_string();
-            
+
             title = title.replace(" | Spotify", "");
             title = title.replace(" - Spotify", "");
             title = title.replace(" - song and lyrics by ", " ");
@@ -293,17 +291,18 @@ async fn resolve_spotify_url(url: &str) -> Result<String, String> {
             title = title.replace(" - EP by ", " ");
             title = title.replace(" - album by ", " ");
             title = title.replace(" - single by ", " ");
-            
-            title = title.replace("&#39;", "'")
-                         .replace("&amp;", "&")
-                         .replace("&quot;", "\"")
-                         .replace("&lt;", "<")
-                         .replace("&gt;", ">");
-                         
+
+            title = title
+                .replace("&#39;", "'")
+                .replace("&amp;", "&")
+                .replace("&quot;", "\"")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">");
+
             return Ok(format!("ytsearch1:{}", title.trim()));
         }
     }
-    
+
     Err("Could not extract title from Spotify page".to_string())
 }
 
@@ -313,7 +312,7 @@ async fn get_playlist_info(
     cookies_path: Option<String>,
 ) -> Result<PlaylistInfo, String> {
     let mut resolved_url = url.clone();
-    
+
     if resolved_url.contains("spotify.com") {
         resolved_url = resolve_spotify_url(&resolved_url).await?;
     }
@@ -344,9 +343,9 @@ async fn get_playlist_info(
         cmd.creation_flags(0x08000000);
         cmd.output()
     })
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| format!("yt-dlp not found: {}", e))?;
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("yt-dlp not found: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -474,7 +473,7 @@ async fn download_track(
             "ogg" => "vorbis",
             _ => &format,
         };
-        
+
         let audio_quality = match quality.as_str() {
             "best" => "0",
             "good" => "2",
@@ -500,7 +499,7 @@ async fn download_track(
             "worst" => "worstvideo+worstaudio/worst",
             _ => "bestvideo+bestaudio/best",
         };
-        
+
         args.extend([
             "-f".to_string(),
             video_format.to_string(),
@@ -574,28 +573,27 @@ async fn download_track(
                             downloaded_paths.push(_final_path.clone());
                         }
                     } else if trimmed.starts_with("[Merger] Merging formats into \"") {
-                        let path = trimmed
-                            .replace("[Merger] Merging formats into \"", "");
+                        let path = trimmed.replace("[Merger] Merging formats into \"", "");
                         let path = path.trim_end_matches('"').to_string();
                         if !downloaded_paths.contains(&path) {
                             downloaded_paths.push(path);
                         }
                     }
-                    
+
                     // Also check for existing file
                     if trimmed.contains("has already been downloaded") {
-                         // Extract path between [download] and has already...
-                         if let Some(start) = trimmed.find(" ") {
-                             if let Some(end) = trimmed.find(" has already") {
-                                 _final_path = trimmed[start..end].trim().to_string();
-                                 if !downloaded_paths.contains(&_final_path) {
-                                     downloaded_paths.push(_final_path.clone());
-                                 }
-                             }
-                         }
-                         already_downloaded = true;
-                         // Emit 100% progress immediately for existing files
-                         let progress = DownloadProgress {
+                        // Extract path between [download] and has already...
+                        if let Some(start) = trimmed.find(" ") {
+                            if let Some(end) = trimmed.find(" has already") {
+                                _final_path = trimmed[start..end].trim().to_string();
+                                if !downloaded_paths.contains(&_final_path) {
+                                    downloaded_paths.push(_final_path.clone());
+                                }
+                            }
+                        }
+                        already_downloaded = true;
+                        // Emit 100% progress immediately for existing files
+                        let progress = DownloadProgress {
                             status: "downloading".to_string(),
                             percent: 100.0,
                             speed: "Skipped (Exists)".to_string(),
@@ -613,13 +611,16 @@ async fn download_track(
                         if let Some(percent_idx) = trimmed.find('%') {
                             let prefix = &trimmed[..percent_idx];
                             // Extract just the numbers before the %
-                            let percent_str: String = prefix.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect();
+                            let percent_str: String = prefix
+                                .chars()
+                                .filter(|c| c.is_ascii_digit() || *c == '.')
+                                .collect();
                             let percent: f64 = percent_str.parse().unwrap_or(0.0);
-                            
+
                             // Extract speed and ETA
                             let mut speed = String::new();
                             let mut eta = String::new();
-                            
+
                             if let Some(at_idx) = trimmed.find(" at ") {
                                 if let Some(eta_idx) = trimmed.find(" ETA ") {
                                     if at_idx + 4 < eta_idx {
@@ -651,8 +652,12 @@ async fn download_track(
                     }
 
                     // Track converting
-                    if (trimmed.starts_with("[ExtractAudio]") || trimmed.starts_with("[Merger]") || trimmed.starts_with("[VideoConvertor]") || trimmed.starts_with("[Fixup"))
-                       && !trimmed.contains("Not converting") {
+                    if (trimmed.starts_with("[ExtractAudio]")
+                        || trimmed.starts_with("[Merger]")
+                        || trimmed.starts_with("[VideoConvertor]")
+                        || trimmed.starts_with("[Fixup"))
+                        && !trimmed.contains("Not converting")
+                    {
                         let progress = DownloadProgress {
                             status: "converting".to_string(),
                             percent: 100.0,
@@ -786,7 +791,10 @@ async fn convert_file(app: AppHandle, request: ConvertRequest) -> Result<String,
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| ".".to_string());
 
-    let input_ext = input_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let input_ext = input_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
     let output_path = if input_ext.eq_ignore_ascii_case(&output_format) {
         format!("{}/{}_converted.{}", parent, stem, output_format)
     } else {
@@ -922,10 +930,15 @@ async fn install_ffmpeg() -> Result<String, String> {
             .output()
             .map_err(|e| format!("winget not available: {}", e))?;
 
-        if output.status.success() {
-            Ok("FFmpeg installed successfully".to_string())
+        let output_text = command_output_text(&output);
+        if output.status.success() || winget_output_means_installed(&output_text) {
+            Ok("FFmpeg ist bereits installiert oder wurde erfolgreich installiert.".to_string())
         } else {
-            Err(String::from_utf8_lossy(&output.stderr).to_string())
+            Err(format_winget_error(
+                "FFmpeg",
+                output.status.code(),
+                &output_text,
+            ))
         }
     }
 
@@ -978,12 +991,15 @@ async fn install_ytdlp() -> Result<String, String> {
             .output()
             .map_err(|e| format!("winget not available: {}", e))?;
 
-        if output.status.success()
-            || String::from_utf8_lossy(&output.stdout).contains("already installed")
-        {
+        let output_text = command_output_text(&output);
+        if output.status.success() || winget_output_means_installed(&output_text) {
             Ok("yt-dlp installed successfully".to_string())
         } else {
-            Err(String::from_utf8_lossy(&output.stderr).to_string())
+            Err(format_winget_error(
+                "yt-dlp",
+                output.status.code(),
+                &output_text,
+            ))
         }
     }
 
@@ -993,12 +1009,51 @@ async fn install_ytdlp() -> Result<String, String> {
     }
 }
 
+fn command_output_text(output: &std::process::Output) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    [stdout.trim(), stderr.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(target_os = "windows")]
+fn winget_output_means_installed(output: &str) -> bool {
+    let normalized = output.to_lowercase();
+    normalized.contains("already installed")
+        || normalized.contains("no available upgrade")
+        || normalized.contains("kein verfügbares upgrade")
+        || normalized.contains("kein verfugbares upgrade")
+        || normalized.contains("no newer package versions are available")
+        || normalized.contains("keine neueren paketversionen verfügbar")
+        || normalized.contains("keine neueren paketversionen verfugbar")
+}
+
+#[cfg(target_os = "windows")]
+fn format_winget_error(package: &str, code: Option<i32>, output: &str) -> String {
+    let details = output.trim();
+    let code_text = code
+        .map(|code| code.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    if details.is_empty() {
+        format!("Installation failed for {package}: winget exited with code {code_text}.")
+    } else {
+        format!(
+            "Installation failed for {package}: winget exited with code {code_text}.\n{details}"
+        )
+    }
+}
+
 #[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         Command::new("explorer")
             .arg(&path)
+            .creation_flags(0x08000000)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
@@ -1032,7 +1087,12 @@ fn get_config_path() -> PathBuf {
 }
 
 fn check_tool(name: &str, args: &[&str]) -> (bool, String) {
-    match Command::new(name).args(args).output() {
+    let mut cmd = Command::new(name);
+    cmd.args(args);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+
+    match cmd.output() {
         Ok(output) => {
             let version_text = String::from_utf8_lossy(&output.stdout);
             let first_line = version_text.lines().next().unwrap_or("unknown").to_string();
@@ -1089,20 +1149,20 @@ use tauri::{
 #[tauri::command]
 fn ss_get_local_ip() -> Result<String, String> {
     use std::net::UdpSocket;
-    
+
     // Wir versuchen eine Verbindung zu einer Dummy-Adresse aufzubauen (8.8.8.8),
     // um herauszufinden, welches Interface das System für den Netzwerkverkehr nutzt.
     // Es wird kein tatsächliches Paket gesendet.
     let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
     socket.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
     let local_addr = socket.local_addr().map_err(|e| e.to_string())?;
-    
+
     let ip = local_addr.ip();
-    
+
     // Falls wir doch auf einer Hamachi/Virtual-IP (26.x.x.x oder ähnlich) landen,
     // oder falls die Methode fehlschlägt, nutzen wir local_ip() als Fallback.
     if ip.is_loopback() || ip.is_unspecified() {
-         return local_ip_address::local_ip()
+        return local_ip_address::local_ip()
             .map(|ip| ip.to_string())
             .map_err(|e| e.to_string());
     }
@@ -1125,17 +1185,35 @@ fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
             match (request.method(), request.url()) {
                 (&Method::Get, "/") => {
                     let html = include_str!("remote.html");
-                    let response = Response::from_string(html)
-                        .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..]).unwrap());
+                    let response = Response::from_string(html).with_header(
+                        tiny_http::Header::from_bytes(
+                            &b"Content-Type"[..],
+                            &b"text/html; charset=utf-8"[..],
+                        )
+                        .unwrap(),
+                    );
                     let _ = request.respond(response);
                 }
                 (&Method::Get, "/status") => {
                     let state = server_handle.state::<AppState>();
                     let progress = state.current_progress.lock().unwrap().clone();
-                    let json = serde_json::to_string(&progress).unwrap_or_else(|_| "null".to_string());
+                    let json =
+                        serde_json::to_string(&progress).unwrap_or_else(|_| "null".to_string());
                     let response = Response::from_string(json)
-                        .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap())
-                        .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap());
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Content-Type"[..],
+                                &b"application/json"[..],
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Access-Control-Allow-Origin"[..],
+                                &b"*"[..],
+                            )
+                            .unwrap(),
+                        );
                     let _ = request.respond(response);
                 }
                 (&Method::Post, "/send") => {
@@ -1144,11 +1222,20 @@ fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
 
                     if let Ok(payload) = serde_json::from_str::<RemotePayload>(&content) {
                         println!("Remote API received valid payload: {:?}", payload);
-                        if let Err(e) = server_handle.emit_to("main", "remote-url-received", payload) {
+                        if let Err(e) =
+                            server_handle.emit_to("main", "remote-url-received", payload)
+                        {
                             println!("Failed to emit event to main window: {:?}", e);
                         }
-                        let _ = request.respond(Response::from_string("OK")
-                            .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap()));
+                        let _ = request.respond(
+                            Response::from_string("OK").with_header(
+                                tiny_http::Header::from_bytes(
+                                    &b"Access-Control-Allow-Origin"[..],
+                                    &b"*"[..],
+                                )
+                                .unwrap(),
+                            ),
+                        );
                     } else {
                         println!("Remote API failed to parse JSON, falling back to simple text. Content: {}", content);
                         // Fallback for simple string URL
@@ -1159,26 +1246,65 @@ fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
                                 format: None,
                                 auto_start: None,
                             };
-                            if let Err(e) = server_handle.emit_to("main", "remote-url-received", payload.clone()) {
+                            if let Err(e) = server_handle.emit_to(
+                                "main",
+                                "remote-url-received",
+                                payload.clone(),
+                            ) {
                                 println!("Failed to emit event (fallback) to main window: {:?}", e);
                             }
-                            let _ = request.respond(Response::from_string("OK")
-                                .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap()));
+                            let _ = request.respond(
+                                Response::from_string("OK").with_header(
+                                    tiny_http::Header::from_bytes(
+                                        &b"Access-Control-Allow-Origin"[..],
+                                        &b"*"[..],
+                                    )
+                                    .unwrap(),
+                                ),
+                            );
                         } else {
-                            let _ = request.respond(Response::from_string("Empty URL").with_status_code(400)
-                                .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap()));
+                            let _ = request.respond(
+                                Response::from_string("Empty URL")
+                                    .with_status_code(400)
+                                    .with_header(
+                                        tiny_http::Header::from_bytes(
+                                            &b"Access-Control-Allow-Origin"[..],
+                                            &b"*"[..],
+                                        )
+                                        .unwrap(),
+                                    ),
+                            );
                         }
                     }
                 }
                 (&Method::Options, _) => {
                     let response = Response::from_string("")
-                        .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Origin"[..], &b"*"[..]).unwrap())
-                        .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Methods"[..], &b"POST, GET, OPTIONS"[..]).unwrap())
-                        .with_header(tiny_http::Header::from_bytes(&b"Access-Control-Allow-Headers"[..], &b"Content-Type"[..]).unwrap());
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Access-Control-Allow-Origin"[..],
+                                &b"*"[..],
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Access-Control-Allow-Methods"[..],
+                                &b"POST, GET, OPTIONS"[..],
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Access-Control-Allow-Headers"[..],
+                                &b"Content-Type"[..],
+                            )
+                            .unwrap(),
+                        );
                     let _ = request.respond(response);
                 }
                 _ => {
-                    let _ = request.respond(Response::from_string("Not Found").with_status_code(404));
+                    let _ =
+                        request.respond(Response::from_string("Not Found").with_status_code(404));
                 }
             }
         }
@@ -1204,13 +1330,14 @@ async fn download_and_install_update(
             .call()
             .map_err(|e| format!("Download failed: {}", e))?;
 
-        let mut file = fs::File::create(&file_path)
-            .map_err(|e| format!("Failed to create file: {}", e))?;
+        let mut file =
+            fs::File::create(&file_path).map_err(|e| format!("Failed to create file: {}", e))?;
 
         let mut reader = resp.into_reader();
         let mut buffer = [0u8; 8192];
         loop {
-            let bytes_read = reader.read(&mut buffer)
+            let bytes_read = reader
+                .read(&mut buffer)
                 .map_err(|e| format!("Read error: {}", e))?;
             if bytes_read == 0 {
                 break;
@@ -1220,7 +1347,9 @@ async fn download_and_install_update(
         }
 
         Ok(file_path)
-    }).join().map_err(|_| "Thread panicked".to_string())??;
+    })
+    .join()
+    .map_err(|_| "Thread panicked".to_string())??;
 
     // Launch the installer
     #[cfg(target_os = "windows")]
