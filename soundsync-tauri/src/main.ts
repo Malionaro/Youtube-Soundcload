@@ -47,6 +47,7 @@ interface AppConfig {
   quality?: string;
   auto_scroll_log?: boolean;
   eco_mode?: boolean;
+  auto_tagging?: boolean;
 }
 
 interface PlaylistEntry {
@@ -83,6 +84,7 @@ let config: AppConfig = {
   discord_rpc: false,
   auto_scroll_log: true,
   eco_mode: true,
+  auto_tagging: true,
 };
 
 let isDownloading = false;
@@ -142,6 +144,32 @@ function setupElements() {
   }
 }
 
+// ─── Tabs ────────────────────────────────────────────────────────────────────
+function setupTabs() {
+  const tabs = document.querySelectorAll(".tab-btn");
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      const targetId = tab.getAttribute("data-tab");
+      if (!targetId) return;
+
+      // Update buttons
+      tabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      // Update content
+      document.querySelectorAll(".tab-content").forEach(content => {
+        content.classList.remove("active");
+      });
+      $(targetId).classList.add("active");
+
+      // Special actions on tab switch
+      if (targetId === "trending-tab" && $(targetId).querySelector(".loading-state")) {
+        loadTrending();
+      }
+    });
+  });
+}
+
 
 
 // ─── Init ────────────────────────────────────────────────────────────────────
@@ -195,6 +223,11 @@ async function init() {
         ($("accent-color-picker") as HTMLInputElement).value = config.accent_color;
     }
     
+    // Auto-tagging sync
+    if (config.auto_tagging === undefined) config.auto_tagging = true;
+    const taggingToggle = document.getElementById("auto-tagging-toggle") as HTMLInputElement;
+    if (taggingToggle) taggingToggle.checked = config.auto_tagging;
+
     updateRemoteStatus();
     setupEcoMode();
     
@@ -212,8 +245,93 @@ async function init() {
   updateUI();
   setupEventListeners();
   setupTauriListeners();
+  setupTabs();
   checkSystem();
   log(`🎵 SoundSync Downloader v${appVersion} ready`, "success");
+}
+
+// ─── Search & Trending ───────────────────────────────────────────────────────
+async function performSearch() {
+  const input = getEl<HTMLInputElement>("search-input");
+  const query = input.value.trim();
+  if (!query) return;
+
+  const resultsGrid = $("search-results");
+  resultsGrid.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Suche nach "${query}"...</span></div>`;
+
+  try {
+    const info = await invoke<PlaylistInfo>("search_videos", { query });
+    renderResults(info.entries, resultsGrid);
+  } catch (e) {
+    resultsGrid.innerHTML = `<div class="empty-state"><p class="status-text error">Fehler bei der Suche: ${e}</p></div>`;
+  }
+}
+
+async function loadTrending() {
+  const resultsGrid = $("trending-results");
+  resultsGrid.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Top-Charts werden geladen...</span></div>`;
+
+  try {
+    const info = await invoke<PlaylistInfo>("get_trending_videos");
+    renderResults(info.entries, resultsGrid);
+  } catch (e) {
+    resultsGrid.innerHTML = `<div class="empty-state"><p class="status-text error">Fehler beim Laden der Trends: ${e}</p></div>`;
+  }
+}
+
+function renderResults(entries: PlaylistEntry[], container: HTMLElement) {
+  if (!entries || entries.length === 0) {
+    container.innerHTML = `<div class="empty-state"><p>Keine Ergebnisse gefunden.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = "";
+  entries.forEach((entry, idx) => {
+    const card = document.createElement("div");
+    card.className = "result-card";
+    card.style.animationDelay = `${idx * 0.05}s`;
+
+    const durationStr = entry.duration ? formatDuration(entry.duration) : "";
+    
+    card.innerHTML = `
+      <div class="result-thumb-container">
+        <img src="${entry.thumbnail || '/src/assets/logo.png'}" class="result-thumb" loading="lazy" />
+        ${durationStr ? `<span class="result-duration">${durationStr}</span>` : ""}
+      </div>
+      <div class="result-info">
+        <h3 class="result-title" title="${entry.title}">${entry.title}</h3>
+        <span class="result-channel">YouTube</span>
+      </div>
+      <div class="result-actions">
+        <button class="btn btn-small btn-primary btn-full download-result-btn" data-url="${entry.url}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </button>
+      </div>
+    `;
+
+    card.querySelector(".download-result-btn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const url = (e.currentTarget as HTMLElement).getAttribute("data-url");
+      if (url) {
+        urlInput.value = url;
+        updateDownloadBtnState();
+        // Switch to downloader tab
+        document.querySelector<HTMLElement>('.tab-btn[data-tab="downloader-tab"]')?.click();
+        log(`🎯 Track ausgewählt: ${entry.title}`, "info");
+      }
+    });
+
+    container.appendChild(card);
+  });
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 async function updateDiscordPresence(details: string, state_msg: string) {
@@ -439,6 +557,7 @@ function setupEventListeners() {
     config.disable_changelog = ($("disable-changelog-toggle") as HTMLInputElement).checked;
     config.auto_scroll_log = ($("auto-scroll-toggle") as HTMLInputElement).checked;
     config.eco_mode = ($("eco-mode-toggle") as HTMLInputElement).checked;
+    config.auto_tagging = ($("auto-tagging-toggle") as HTMLInputElement).checked;
     
     // Update main toggle if changed
     const mainToggle = document.getElementById("auto-url-toggle") as HTMLInputElement;
@@ -465,6 +584,12 @@ function setupEventListeners() {
   });
 
   on("check-update-btn", "click", () => checkForUpdates(true));
+
+  on("perform-search-btn", "click", performSearch);
+  on("search-input", "keypress", (e: KeyboardEvent) => {
+    if (e.key === "Enter") performSearch();
+  });
+  on("refresh-trending-btn", "click", loadTrending);
 
   if (config.auto_url_detection) {
       startClipboardWatcher();
