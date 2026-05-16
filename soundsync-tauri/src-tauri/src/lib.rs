@@ -46,6 +46,8 @@ pub struct AppConfig {
     pub auto_scroll_log: bool,
     #[serde(default = "default_true")]
     pub eco_mode: bool,
+    #[serde(default = "default_true")]
+    pub auto_tagging: bool,
 }
 
 fn default_auto_url_detection() -> bool {
@@ -75,6 +77,7 @@ impl Default for AppConfig {
             quality: "best".to_string(),
             auto_scroll_log: true,
             eco_mode: true,
+            auto_tagging: true,
         }
     }
 }
@@ -416,6 +419,19 @@ async fn get_playlist_info(
 }
 
 #[tauri::command]
+async fn search_videos(query: String) -> Result<PlaylistInfo, String> {
+    let resolved_url = format!("ytsearch20:{}", query);
+    get_playlist_info(resolved_url, None).await
+}
+
+#[tauri::command]
+async fn get_trending_videos() -> Result<PlaylistInfo, String> {
+    // YouTube Music Trending Charts
+    let url = "https://www.youtube.com/feed/trending?bp=4gINGgt5dG1hX2NoYXJ0cw%3D%3D".to_string();
+    get_playlist_info(url, None).await
+}
+
+#[tauri::command]
 async fn reset_download_cancel(state: State<'_, AppState>) -> Result<(), String> {
     let mut abort = state.abort_flag.lock().unwrap();
     *abort = false;
@@ -512,6 +528,17 @@ async fn download_track(
         if !cp.is_empty() && std::path::Path::new(cp).exists() {
             args.extend(["--cookies".to_string(), cp.clone()]);
         }
+    }
+
+    // AI Tagging & Metadata
+    let auto_tagging = { state.config.lock().unwrap().auto_tagging };
+    if auto_tagging {
+        args.extend([
+            "--embed-metadata".to_string(),
+            "--embed-thumbnail".to_string(),
+            "--convert-thumbnails".to_string(),
+            "jpg".to_string(),
+        ]);
     }
 
     args.push(url.clone());
@@ -1485,7 +1512,9 @@ pub fn run() {
             update_discord_presence,
             ss_get_local_ip,
             ss_start_remote_server,
-            download_and_install_update
+            download_and_install_update,
+            search_videos,
+            get_trending_videos
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
