@@ -53,8 +53,24 @@
     <main id="app-main">
       <!-- LEFT: Controls + Progress + Log -->
       <section class="main-panel">
+        
+        <!-- Tab Navigation -->
+        <nav class="nav-tabs" id="nav-tabs">
+          <button class="tab-btn active" data-tab="downloader-tab">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Downloader</span>
+          </button>
+          <button class="tab-btn" data-tab="search-tab">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Suche</span>
+          </button>
+          <button class="tab-btn" data-tab="trending-tab">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            <span>Trending</span>
+          </button>
+        </nav>
 
-        <!-- URL Input -->
+        <div id="downloader-tab" class="tab-content active">
         <div class="card" id="url-card">
           <div class="url-card-header">
             <label class="input-label" id="url-label" for="url-input">YouTube oder SoundCloud URL:</label>
@@ -195,6 +211,55 @@
             </div>
           </div>
           <div class="log-output" id="log-output"></div>
+        </div>
+        </div> <!-- End Downloader Tab -->
+
+        <!-- Search Tab -->
+        <div id="search-tab" class="tab-content">
+          <div class="card search-controls">
+            <div class="input-row">
+              <div class="input-wrapper">
+                <input type="text" id="search-input" class="text-input" placeholder="Nach Songs oder Videos suchen..." autocomplete="off" />
+                <button id="perform-search-btn" class="btn btn-primary">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                   Suchen
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="search-results-container">
+            <div id="search-results" class="results-grid">
+               <!-- Search results will be injected here -->
+               <div class="empty-state">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <p>Gib einen Suchbegriff ein, um Musik zu finden.</p>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Trending Tab -->
+        <div id="trending-tab" class="tab-content">
+          <div class="trending-header card">
+             <div class="trending-info">
+                <h2>🔥 Aktuelle Musik-Charts</h2>
+                <p>Die beliebtesten Tracks von YouTube Music</p>
+             </div>
+             <button id="refresh-trending-btn" class="icon-btn" title="Aktualisieren">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+             </button>
+          </div>
+          <div class="trending-results-container">
+             <div id="trending-results" class="results-grid">
+                <!-- Trending results will be injected here -->
+                <div class="loading-state">
+                   <div class="spinner"></div>
+                   <span>Charts werden geladen...</span>
+                </div>
+             </div>
+          </div>
         </div>
       </section>
 
@@ -409,6 +474,17 @@
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="eco-mode-toggle" checked />
+                <span class="toggle-track"><span class="toggle-track-inner-on"></span></span>
+              </label>
+            </div>
+
+            <div class="setting-item separator">
+              <div class="setting-info">
+                <strong id="setting-tagging-title">🏷️ KI-Tagging & Cover</strong>
+                <span id="setting-tagging-desc">Bettet automatisch Metadaten und Cover-Bilder in die Dateien ein.</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="auto-tagging-toggle" checked />
                 <span class="toggle-track"><span class="toggle-track-inner-on"></span></span>
               </label>
             </div>
