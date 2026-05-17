@@ -1622,3 +1622,99 @@ input:checked + .toggle-track::after {
 .eco-mode .progress-bar {
   transition-duration: 0.4s !important;
 }
+
+/* ═══ TV Mode (10-Foot UI) ═══ */
+body.tv-mode {
+  font-size: 1.25rem;
+}
+body.tv-mode #app-main {
+  grid-template-columns: 1fr;
+  padding: 24px;
+  gap: 24px;
+}
+body.tv-mode .sidebar {
+  display: none;
+}
+body.tv-mode .card {
+  padding: 30px;
+  border-width: 2px;
+}
+body.tv-mode .text-input, body.tv-mode .select-input {
+  height: 56px;
+  font-size: 18px;
+}
+body.tv-mode .btn {
+  height: 56px;
+  font-size: 18px;
+}
+body.tv-mode .icon-btn {
+  width: 48px;
+  height: 48px;
+}
+body.tv-mode .icon-btn svg {
+  width: 24px;
+  height: 24px;
+}
+body.tv-mode #app-header {
+  padding: 20px 32px;
+}
+body.tv-mode *:focus {
+  outline: 4px solid var(--accent) !important;
+  outline-offset: 4px !important;
+  transform: scale(1.02);
+  transition: transform 0.2s, outline 0.1s;
+  z-index: 10;
+  box-shadow: 0 0 30px var(--accent-glow) !important;
+}
+
+/* ═══ Tooltip & Info Badge ═══ */
+.tooltip-container {
+  position: relative;
+  overflow: visible !important;
+}
+.info-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--primary);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+  font-family: monospace;
+}
+.custom-tooltip {
+  position: absolute;
+  top: 120%;
+  right: 0;
+  width: max-content;
+  max-width: 250px;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(15px);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  border: 1px solid var(--border);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.2s ease;
+  z-index: 1000;
+  pointer-events: none;
+  text-align: left;
+}
+.tooltip-container:hover .custom-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+

@@ -20,7 +20,7 @@
           <img src="/src/assets/logo.png" alt="Logo" width="28" height="28" style="border-radius: 6px;" />
         </div>
         <h1 id="app-title">SoundSync Downloader</h1>
-        <span class="version-badge" id="version-badge">v2.3.1</span>
+        <span class="version-badge" id="version-badge">v2.3.3</span>
       </div>
       <div class="header-right">
         <select id="language-select" class="language-select">
@@ -28,7 +28,7 @@
           <option value="en">English</option>
           <option value="pl">Polski</option>
         </select>
-        <button id="theme-toggle" class="icon-btn" title="Toggle Theme">
+        <button id="theme-toggle" class="icon-btn" title="" data-i18n-title="toggle_theme">
           <svg id="theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
@@ -36,10 +36,17 @@
             <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
           </svg>
         </button>
-        <button id="system-check-btn" class="icon-btn" title="System Check">
+        <button id="system-check-btn" class="icon-btn" title="" data-i18n-title="system_check">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           </svg>
+        </button>
+        <button id="tv-mode-btn" class="icon-btn tooltip-container" title="" data-i18n-title="tv_mode">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/>
+          </svg>
+          <span class="info-badge">i</span>
+          <div class="custom-tooltip" data-i18n="tv_mode_desc">Vergrößert das UI für Fernseher und aktiviert die Pfeiltasten-Navigation.</div>
         </button>
         <button id="settings-btn" class="icon-btn" title="Settings">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -59,32 +66,32 @@
           <div class="nav-indicator" id="nav-indicator"></div>
           <button class="tab-btn active" data-tab="downloader-tab">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Downloader</span>
+            <span data-i18n="tab_downloader">Downloader</span>
           </button>
           <button class="tab-btn" data-tab="search-tab">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span>Suche</span>
+            <span data-i18n="tab_search">Suche</span>
           </button>
           <button class="tab-btn" data-tab="trending-tab">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-            <span>Trending</span>
+            <span data-i18n="tab_trending">Trending</span>
           </button>
         </nav>
 
         <div id="downloader-tab" class="tab-content active">
         <div class="card" id="url-card">
           <div class="url-card-header">
-            <label class="input-label" id="url-label" for="url-input">YouTube oder SoundCloud URL:</label>
-            <label class="toggle-setting" title="YouTube/SoundCloud-Links aus der Zwischenablage erkennen">
+            <label class="input-label" id="url-label" for="url-input" data-i18n="url_label">YouTube oder SoundCloud URL:</label>
+            <label class="toggle-setting" title="" data-i18n-title="auto_detect_url_title">
               <input type="checkbox" id="auto-url-toggle" checked />
               <span class="toggle-track"><span class="toggle-track-inner-on"></span></span>
-              <span>Auto-Erkennung</span>
+              <span data-i18n="auto_detect_url">Auto-Erkennung</span>
             </label>
           </div>
           <div class="input-row">
             <div class="input-wrapper">
-              <input type="text" id="url-input" class="text-input url-input" placeholder="https://www.youtube.com/... oder https://soundcloud.com/..." autocomplete="off" />
-              <button id="clear-url-btn" class="clear-btn" title="Clear">✕</button>
+              <input type="text" id="url-input" class="text-input url-input" placeholder="" data-i18n-placeholder="url_placeholder" autocomplete="off" />
+              <button id="clear-url-btn" class="clear-btn" title="" data-i18n-title="clear">✕</button>
             </div>
           </div>
         </div>
@@ -92,9 +99,9 @@
         <!-- Settings Row -->
         <div class="card settings-row">
           <div class="setting-group">
-            <label class="input-label" id="folder-label">Zielordner:</label>
+            <label class="input-label" id="folder-label" data-i18n="folder_label">Zielordner:</label>
             <div class="input-row">
-              <input type="text" id="folder-input" class="text-input" placeholder="Wählen Sie einen Speicherort..." readonly />
+              <input type="text" id="folder-input" class="text-input" placeholder="" data-i18n-placeholder="folder_placeholder" readonly />
               <button id="browse-btn" class="btn btn-secondary" data-i18n="browse">Durchsuchen</button>
               <button id="open-folder-btn" class="icon-btn small" title="Open Folder">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -102,7 +109,7 @@
             </div>
           </div>
           <div class="setting-group compact">
-            <label class="input-label" id="format-label">Format:</label>
+            <label class="input-label" id="format-label" data-i18n="format_label">Format:</label>
             <select id="format-select" class="select-input">
               <option value="mp3" selected>mp3</option>
               <option value="m4a">m4a</option>
@@ -127,29 +134,29 @@
             </select>
           </div>
           <div class="setting-group compact" id="quality-group">
-            <label class="input-label" id="quality-label">Qualität:</label>
+            <label class="input-label" id="quality-label" data-i18n="quality">Qualität:</label>
             <select id="quality-select" class="select-input">
               <!-- Audio Qualities -->
-              <optgroup label="Audio (Bitrate)" id="audio-qualities">
-                <option value="best" selected>Beste Qualität (VBR 0 / ~320k)</option>
-                <option value="good">Gute Qualität (VBR 2 / ~192k)</option>
-                <option value="worst">Niedrigste Qualität (VBR 9 / ~65k)</option>
+              <optgroup label="Audio (Bitrate)" data-i18n-label="audio_bitrate" id="audio-qualities">
+                <option value="best" selected data-i18n="quality_best">Beste Qualität (VBR 0 / ~320k)</option>
+                <option value="good" data-i18n="quality_good">Gute Qualität (VBR 2 / ~192k)</option>
+                <option value="worst" data-i18n="quality_worst">Niedrigste Qualität (VBR 9 / ~65k)</option>
               </optgroup>
               <!-- Video Qualities -->
-              <optgroup label="Video (Auflösung)" id="video-qualities" style="display: none;">
-                <option value="best">Beste Qualität (Max)</option>
+              <optgroup label="Video (Auflösung)" data-i18n-label="video_resolution" id="video-qualities" style="display: none;">
+                <option value="best" data-i18n="quality_best_max">Beste Qualität (Max)</option>
                 <option value="4k">4K (2160p)</option>
                 <option value="1080p">Full HD (1080p)</option>
                 <option value="720p">HD (720p)</option>
                 <option value="480p">SD (480p)</option>
-                <option value="worst">Niedrigste Qualität</option>
+                <option value="worst" data-i18n="quality_lowest">Niedrigste Qualität</option>
               </optgroup>
             </select>
           </div>
           <div class="setting-group">
-            <label class="input-label" id="cookies-label">YouTube Cookies:</label>
+            <label class="input-label" id="cookies-label" data-i18n="cookies_label">YouTube Cookies:</label>
             <div class="input-row">
-              <input type="text" id="cookies-input" class="text-input" placeholder="Pfad zu YouTube cookies.txt (Netscape-Format)" readonly />
+              <input type="text" id="cookies-input" class="text-input" placeholder="" data-i18n-placeholder="cookies_placeholder" readonly />
               <button id="cookies-btn" class="btn btn-secondary" data-i18n="select">Auswählen</button>
             </div>
           </div>
@@ -159,15 +166,15 @@
         <div class="card button-row">
           <button id="download-btn" class="btn btn-primary btn-lg" disabled>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span id="download-btn-text">Download starten</span>
+            <span id="download-btn-text" data-i18n="start_download">Download starten</span>
           </button>
           <button id="cancel-btn" class="btn btn-danger" disabled>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-            <span id="cancel-btn-text">Abbrechen</span>
+            <span id="cancel-btn-text" data-i18n="cancel">Abbrechen</span>
           </button>
           <button id="convert-btn" class="btn btn-accent">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-            <span id="convert-btn-text">Datei konvertieren</span>
+            <span id="convert-btn-text" data-i18n="convert_file">Datei konvertieren</span>
           </button>
         </div>
 
@@ -175,7 +182,7 @@
         <div class="card progress-section" id="progress-section">
           <div class="progress-item">
             <div class="progress-header">
-              <span class="progress-title" id="progress-label">Bereit zum Starten</span>
+              <span class="progress-title" id="progress-label" data-i18n="ready_to_start">Bereit zum Starten</span>
               <span class="progress-value" id="progress-percent"></span>
             </div>
             <div class="progress-bar-container">
@@ -184,7 +191,7 @@
           </div>
           <div class="progress-item">
             <div class="progress-header">
-              <span class="progress-title" id="convert-label">Konvertierung: Wartend...</span>
+              <span class="progress-title" id="convert-label" data-i18n="conversion_waiting">Konvertierung: Wartend...</span>
               <span class="progress-value" id="convert-percent"></span>
             </div>
             <div class="progress-bar-container">
@@ -193,7 +200,7 @@
           </div>
           <div class="progress-item">
             <div class="progress-header">
-              <span class="progress-title" id="total-progress-label">Gesamtfortschritt: 0% | ETA: --:--:--</span>
+              <span class="progress-title" id="total-progress-label" data-i18n="total_progress">Gesamtfortschritt: 0% | ETA: --:--:--</span>
               <span class="progress-value" id="total-percent"></span>
             </div>
             <div class="progress-bar-container">
@@ -205,9 +212,9 @@
         <!-- Log Output -->
         <div class="card log-section" id="log-section">
           <div class="log-header">
-            <span class="log-title" id="log-title">Aktivitätsprotokoll:</span>
+            <span class="log-title" id="log-title" data-i18n="activity_log">Aktivitätsprotokoll:</span>
             <div class="log-actions">
-              <input type="text" id="log-search" class="text-input small" placeholder="Logs durchsuchen..." />
+              <input type="text" id="log-search" class="text-input small" placeholder="" data-i18n-placeholder="search_placeholder" />
               <button id="clear-log-btn" class="btn btn-small btn-secondary" data-i18n="clear_log">Log leeren</button>
             </div>
           </div>
@@ -220,11 +227,11 @@
           <div class="card search-controls">
             <div class="input-row">
               <div class="input-wrapper">
-                <input type="text" id="search-input" class="text-input" placeholder="Nach Songs oder Videos suchen..." autocomplete="off" />
+                <input type="text" id="search-input" class="text-input" placeholder="" data-i18n-placeholder="search_input_placeholder" autocomplete="off" />
               </div>
               <button id="perform-search-btn" class="btn btn-primary">
                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                 Suchen
+                 <span data-i18n="search_button">Suchen</span>
               </button>
             </div>
           </div>
@@ -235,7 +242,7 @@
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                   </svg>
-                  <p>Gib einen Suchbegriff ein, um Musik zu finden.</p>
+                  <p data-i18n="search_empty_state">Gib einen Suchbegriff ein, um Musik zu finden.</p>
                </div>
             </div>
           </div>
@@ -245,10 +252,10 @@
         <div id="trending-tab" class="tab-content">
           <div class="trending-header card">
              <div class="trending-info">
-                <h2>🔥 Aktuelle Musik-Charts</h2>
-                <p>Die beliebtesten Tracks von YouTube Music</p>
+                <h2 data-i18n="trending_title">🔥 Aktuelle Musik-Charts</h2>
+                <p data-i18n="trending_desc">Die beliebtesten Tracks von YouTube Music</p>
              </div>
-             <button id="refresh-trending-btn" class="icon-btn" title="Aktualisieren">
+             <button id="refresh-trending-btn" class="icon-btn" title="" data-i18n-title="refresh">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
              </button>
           </div>
@@ -257,7 +264,7 @@
                 <!-- Trending results will be injected here -->
                 <div class="loading-state">
                    <div class="spinner"></div>
-                   <span>Charts werden geladen...</span>
+                   <span data-i18n="loading_charts">Charts werden geladen...</span>
                 </div>
              </div>
           </div>
@@ -266,13 +273,13 @@
 
       <!-- RIGHT: Sidebar -->
       <aside class="sidebar" id="sidebar">
-        <h2 class="sidebar-title" id="sidebar-title">Heruntergeladene Titel:</h2>
+        <h2 class="sidebar-title" id="sidebar-title" data-i18n="downloaded_tracks">Heruntergeladene Titel:</h2>
         <div class="track-list" id="track-list">
           <div class="empty-state" id="empty-state">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
               <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
             </svg>
-            <p id="no-downloads-text">Noch keine Downloads</p>
+            <p id="no-downloads-text" data-i18n="no_downloads_yet">Noch keine Downloads</p>
           </div>
         </div>
 
@@ -286,26 +293,26 @@
     <footer id="app-footer">
       <div class="status-left">
         <div class="status-dot" id="status-dot"></div>
-        <span id="status-text">Bereit</span>
+        <span id="status-text" data-i18n="ready">Bereit</span>
       </div>
       <div class="status-right">
         <a id="github-link" href="https://github.com/Malionaro/Johann-Youtube-Soundcload" target="_blank" class="footer-link">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
           GitHub
         </a>
-        <span id="footer-version">Version: 2.3.1</span>
+        <span id="footer-version">Version: 2.3.3</span>
       </div>
     </footer>
 
     <div class="detected-url-banner" id="detected-url-banner" style="display:none">
       <div class="detected-url-copy">
-        <strong>Link erkannt</strong>
-        <span>URL in SoundSync übernehmen?</span>
+        <strong data-i18n="link_detected">Link erkannt</strong>
+        <span data-i18n="use_url_prompt">URL in SoundSync übernehmen?</span>
         <small id="detected-url-text"></small>
       </div>
       <div class="detected-url-actions">
-        <button id="detected-url-use" class="btn btn-small btn-primary">Übernehmen</button>
-        <button id="detected-url-dismiss" class="btn btn-small btn-secondary">Ignorieren</button>
+        <button id="detected-url-use" class="btn btn-small btn-primary" data-i18n="use_url">Übernehmen</button>
+        <button id="detected-url-dismiss" class="btn btn-small btn-secondary" data-i18n="ignore_url">Ignorieren</button>
       </div>
     </div>
 
@@ -313,20 +320,20 @@
     <div class="modal-overlay" id="convert-modal" style="display:none">
       <div class="modal">
         <div class="modal-header">
-          <h2 id="modal-convert-title">🔧 Dateikonvertierung</h2>
+          <h2 id="modal-convert-title" data-i18n="conversion_label">🔧 Dateikonvertierung</h2>
           <button class="modal-close" id="convert-modal-close">✕</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="input-label" id="modal-file-label">Dateien auswählen:</label>
+            <label class="input-label" id="modal-file-label" data-i18n="select_file">Dateien auswählen:</label>
             <div class="input-row">
-              <input type="text" id="convert-file-input" class="text-input" placeholder="Wählen Sie eine oder mehrere Dateien..." readonly />
+              <input type="text" id="convert-file-input" class="text-input" placeholder="" data-i18n-placeholder="select_file_placeholder" readonly />
               <button id="convert-browse-btn" class="btn btn-secondary">Durchsuchen</button>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="input-label" id="modal-format-label">Zielformat:</label>
+              <label class="input-label" id="modal-format-label" data-i18n="target_format">Zielformat:</label>
               <select id="convert-format-select" class="select-input">
                 <optgroup label="Audio">
                   <option value="mp3" selected>mp3</option>
@@ -346,7 +353,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label class="input-label" id="modal-quality-label">Qualität:</label>
+              <label class="input-label" id="modal-quality-label" data-i18n="quality">Qualität:</label>
               <select id="convert-quality-select" class="select-input">
                 <option value="low">Niedrig</option>
                 <option value="medium">Mittel</option>
@@ -357,10 +364,10 @@
           </div>
           <button id="start-convert-btn" class="btn btn-accent btn-lg btn-full">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg>
-            <span id="start-convert-text">Konvertierung starten</span>
+            <span id="start-convert-text" data-i18n="start_conversion">Konvertierung starten</span>
           </button>
           <div class="convert-status">
-            <span id="convert-status-text" class="status-text success">Bereit zur Konvertierung</span>
+            <span id="convert-status-text" class="status-text success" data-i18n="ready_to_convert">Bereit zur Konvertierung</span>
             <div class="progress-bar-container modal-progress" id="modal-progress-container" style="display:none">
               <div class="progress-bar accent" id="modal-convert-progress" style="width: 0%"></div>
             </div>
@@ -373,7 +380,7 @@
     <div class="modal-overlay" id="system-modal" style="display:none">
       <div class="modal small">
         <div class="modal-header">
-          <h2 id="system-modal-title">🛡️ Systemprüfung</h2>
+          <h2 id="system-modal-title" data-i18n="system_check">🛡️ Systemprüfung</h2>
           <button class="modal-close" id="system-modal-close">✕</button>
         </div>
         <div class="modal-body">
@@ -400,15 +407,15 @@
     <div class="modal-overlay" id="settings-modal" style="display:none">
       <div class="modal">
         <div class="modal-header">
-          <h2 id="settings-modal-title">⚙️ Einstellungen</h2>
+          <h2 id="settings-modal-title" data-i18n="settings">⚙️ Einstellungen</h2>
           <button class="modal-close" id="settings-modal-close">✕</button>
         </div>
         <div class="modal-body">
           <div class="settings-list">
             <div class="setting-item">
               <div class="setting-info">
-                <strong id="setting-rpc-title">Discord Rich Presence</strong>
-                <span id="setting-rpc-desc">Zeige deinen aktuellen Download-Status in Discord an.</span>
+                <strong id="setting-rpc-title" data-i18n="discord_rpc">Discord Rich Presence</strong>
+                <span id="setting-rpc-desc" data-i18n="discord_rpc_desc">Zeige deinen aktuellen Download-Status in Discord an.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="discord-rpc-toggle" />
@@ -437,8 +444,8 @@
 
             <div class="setting-item separator">
               <div class="setting-info">
-                <strong id="setting-clipboard-title">Auto-URL Erkennung</strong>
-                <span id="setting-clipboard-desc">Erkennt automatisch Links in der Zwischenablage.</span>
+                <strong id="setting-clipboard-title" data-i18n="auto_detect_clipboard">Auto-URL Erkennung</strong>
+                <span id="setting-clipboard-desc" data-i18n="auto_detect_clipboard_desc">Erkennt automatisch Links in der Zwischenablage.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="settings-auto-url-toggle" />
@@ -448,8 +455,8 @@
 
             <div class="setting-item">
               <div class="setting-info">
-                <strong id="setting-changelog-title">Changelog deaktivieren</strong>
-                <span id="setting-changelog-desc">Zeigt keine Update-Benachrichtigungen mehr an.</span>
+                <strong id="setting-changelog-title" data-i18n="disable_changelog">Changelog deaktivieren</strong>
+                <span id="setting-changelog-desc" data-i18n="disable_changelog_desc">Zeigt keine Update-Benachrichtigungen mehr an.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="disable-changelog-toggle" />
@@ -459,8 +466,8 @@
 
             <div class="setting-item">
               <div class="setting-info">
-                <strong id="setting-autoscroll-title">Auto-Scroll im Log</strong>
-                <span id="setting-autoscroll-desc">Scrollt automatisch zu neuen Log-Einträgen.</span>
+                <strong id="setting-autoscroll-title" data-i18n="auto_scroll_log">Auto-Scroll im Log</strong>
+                <span id="setting-autoscroll-desc" data-i18n="auto_scroll_desc">Scrollt automatisch zu neuen Log-Einträgen.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="auto-scroll-toggle" checked />
@@ -470,8 +477,8 @@
 
             <div class="setting-item">
               <div class="setting-info">
-                <strong id="setting-eco-title">🌿 Eco-Mode (Standby)</strong>
-                <span id="setting-eco-desc">Reduziert CPU-Nutzung im Hintergrund. Pausiert Animationen und Clipboard-Überwachung.</span>
+                <strong id="setting-eco-title" data-i18n="eco_mode">🌿 Eco-Mode (Standby)</strong>
+                <span id="setting-eco-desc" data-i18n="eco_mode_desc">Reduziert CPU-Nutzung im Hintergrund. Pausiert Animationen und Clipboard-Überwachung.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="eco-mode-toggle" checked />
@@ -481,8 +488,8 @@
 
             <div class="setting-item separator">
               <div class="setting-info">
-                <strong id="setting-tagging-title">🏷️ KI-Tagging & Cover</strong>
-                <span id="setting-tagging-desc">Bettet automatisch Metadaten und Cover-Bilder in die Dateien ein.</span>
+                <strong id="setting-tagging-title" data-i18n="ai_tagging">🏷️ KI-Tagging & Cover</strong>
+                <span id="setting-tagging-desc" data-i18n="ai_tagging_desc">Bettet automatisch Metadaten und Cover-Bilder in die Dateien ein.</span>
               </div>
               <label class="toggle-switch">
                 <input type="checkbox" id="auto-tagging-toggle" checked />
@@ -497,7 +504,7 @@
               </div>
               <div id="qr-container" class="qr-container">
                 <div id="qr-placeholder" class="qr-placeholder">
-                  <span>Lade QR...</span>
+                  <span data-i18n="load_qr">Lade QR...</span>
                 </div>
               </div>
             </div>
@@ -505,8 +512,8 @@
 
           <div class="version-info-section">
             <div class="version-header">
-               <span id="current-version-text">Aktuelle Version: 2.3.1</span>
-               <span id="update-status-tag" class="status-tag">Aktuell</span>
+               <span id="current-version-text" data-i18n="current_version">Aktuelle Version: 2.3.3</span>
+               <span id="update-status-tag" class="status-tag" data-i18n="up_to_date">Aktuell</span>
             </div>
             <button id="check-update-btn" class="btn btn-secondary btn-full">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -515,7 +522,7 @@
           </div>
           
           <div class="modal-footer-actions">
-            <button id="save-settings-btn" class="btn btn-primary btn-full">Speichern & Schließen</button>
+            <button id="save-settings-btn" class="btn btn-primary btn-full" data-i18n="save_close">Speichern & Schließen</button>
           </div>
         </div>
       </div>

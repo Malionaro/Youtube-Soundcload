@@ -100,6 +100,8 @@ let selectedConversionFiles: string[] = [];
 let logScrollPending = false;
 let isWindowVisible = true;
 let ecoModeActive = false;
+let isTvMode = false;
+let currentTranslations: Record<string, string> = {};
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
 const $ = (id: string) => (document.getElementById(id) || document.createElement("div")) as HTMLElement;
@@ -228,6 +230,10 @@ async function init() {
   setupElements();
   appVersion = await getVersion();
   try {
+    const savedLang = localStorage.getItem("language") || "de";
+    ($("language-select") as HTMLSelectElement).value = savedLang;
+    await loadTranslations(savedLang);
+    
     config = await invoke<AppConfig>("load_config");
     if (config.download_folder) folderInput.value = config.download_folder;
     if (config.cookies_path) cookiesInput.value = config.cookies_path;
@@ -733,6 +739,58 @@ function setupEventListeners() {
   on("convert-btn", "click", () => {
     $("convert-modal").style.display = "flex";
   });
+  
+  // Language Select
+  on("language-select", "change", async (e: Event) => {
+    const lang = (e.target as HTMLSelectElement).value;
+    localStorage.setItem("language", lang);
+    await loadTranslations(lang);
+  });
+  
+  // TV Mode Toggle
+  on("tv-mode-btn", "click", () => {
+    isTvMode = !isTvMode;
+    if (isTvMode) {
+      document.body.classList.add("tv-mode");
+      log("📺 TV-Modus aktiviert", "info");
+      // Focus first input
+      setTimeout(() => urlInput?.focus(), 100);
+    } else {
+      document.body.classList.remove("tv-mode");
+      log("📺 TV-Modus deaktiviert", "info");
+    }
+  });
+
+  // Basic Keyboard Navigation for TV Mode
+  document.addEventListener("keydown", (e) => {
+    if (!isTvMode) return;
+    
+    const focusable = Array.from(document.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )).filter(el => {
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).visibility !== 'hidden';
+    });
+    
+    if (focusable.length === 0) return;
+    
+    const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+    
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const nextIndex = currentIndex + 1 < focusable.length ? currentIndex + 1 : 0;
+      focusable[nextIndex]?.focus();
+    } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      const prevIndex = currentIndex - 1 >= 0 ? currentIndex - 1 : focusable.length - 1;
+      focusable[prevIndex]?.focus();
+    } else if (e.key === "Escape") {
+      isTvMode = false;
+      document.body.classList.remove("tv-mode");
+      log("📺 TV-Modus deaktiviert", "info");
+    }
+  });
+
   on("convert-modal-close", "click", () => {
     $("convert-modal").style.display = "none";
   });
@@ -1639,6 +1697,49 @@ const saveConfig = debounce(async () => {
     log(`Config konnte nicht gespeichert werden: ${e}`, "warning");
   }
 }, 500);
+
+// ─── Translations ────────────────────────────────────────────────────────────
+
+async function loadTranslations(lang: string) {
+  try {
+    const response = await fetch(`/src/i18n/${lang}.json`);
+    if (!response.ok) throw new Error("Failed to load translations");
+    currentTranslations = await response.json();
+    applyTranslations();
+  } catch (error) {
+    console.error("Translation load error:", error);
+  }
+}
+
+function applyTranslations() {
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (key && currentTranslations[key]) {
+      el.textContent = currentTranslations[key];
+    }
+  });
+
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (key && currentTranslations[key]) {
+      (el as HTMLInputElement).placeholder = currentTranslations[key];
+    }
+  });
+
+  document.querySelectorAll("[data-i18n-title]").forEach(el => {
+    const key = el.getAttribute("data-i18n-title");
+    if (key && currentTranslations[key]) {
+      el.setAttribute("title", currentTranslations[key]);
+    }
+  });
+
+  document.querySelectorAll("[data-i18n-label]").forEach(el => {
+    const key = el.getAttribute("data-i18n-label");
+    if (key && currentTranslations[key]) {
+      el.setAttribute("label", currentTranslations[key]);
+    }
+  });
+}
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", init);
