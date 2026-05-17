@@ -46,6 +46,7 @@ interface AppConfig {
   format?: string;
   quality?: string;
   auto_scroll_log?: boolean;
+  auto_scroll_tracks?: boolean;
   eco_mode?: boolean;
   auto_tagging?: boolean;
 }
@@ -83,6 +84,7 @@ let config: AppConfig = {
   auto_url_detection: true,
   discord_rpc: false,
   auto_scroll_log: true,
+  auto_scroll_tracks: true,
   eco_mode: true,
   auto_tagging: true,
 };
@@ -246,6 +248,7 @@ async function init() {
 
     // Apply defaults for new settings
     if (config.auto_scroll_log === undefined) config.auto_scroll_log = true;
+    if (config.auto_scroll_tracks === undefined) config.auto_scroll_tracks = true;
     if (config.eco_mode === undefined) config.eco_mode = true;
 
     applyTheme();
@@ -542,10 +545,11 @@ function setupEventListeners() {
     ($("settings-modal") as HTMLElement).style.display = "flex";
     // Sync checkboxes with current config
     ($("discord-rpc-toggle") as HTMLInputElement).checked = config.discord_rpc;
-    ($("settings-auto-url-toggle") as HTMLInputElement).checked = config.auto_url_detection;
     ($("disable-changelog-toggle") as HTMLInputElement).checked = config.disable_changelog;
     ($("auto-scroll-toggle") as HTMLInputElement).checked = config.auto_scroll_log !== false;
+    ($("auto-scroll-tracks-toggle") as HTMLInputElement).checked = config.auto_scroll_tracks !== false;
     ($("eco-mode-toggle") as HTMLInputElement).checked = config.eco_mode !== false;
+    ($("auto-tagging-toggle") as HTMLInputElement).checked = config.auto_tagging !== false;
     ($("accent-color-picker") as HTMLInputElement).value = config.accent_color || "#6c5ce7";
   });
 
@@ -588,34 +592,31 @@ function setupEventListeners() {
 
   on("save-settings-btn", "click", async () => {
     config.discord_rpc = ($("discord-rpc-toggle") as HTMLInputElement).checked;
-    config.auto_url_detection = ($("settings-auto-url-toggle") as HTMLInputElement).checked;
     config.disable_changelog = ($("disable-changelog-toggle") as HTMLInputElement).checked;
     config.auto_scroll_log = ($("auto-scroll-toggle") as HTMLInputElement).checked;
+    config.auto_scroll_tracks = ($("auto-scroll-tracks-toggle") as HTMLInputElement).checked;
     config.eco_mode = ($("eco-mode-toggle") as HTMLInputElement).checked;
     config.auto_tagging = ($("auto-tagging-toggle") as HTMLInputElement).checked;
     
-    // Update main toggle if changed
-    const mainToggle = document.getElementById("auto-url-toggle") as HTMLInputElement;
-    if (mainToggle) mainToggle.checked = config.auto_url_detection;
-    
-    // Start/stop clipboard watcher based on new setting
-    if (config.auto_url_detection) {
-      startClipboardWatcher();
+    // Apply Eco Mode immediately
+    if (config.eco_mode) {
+      if (!isWindowVisible || !document.hasFocus()) {
+        enterEcoMode();
+      }
     } else {
-      stopClipboardWatcher();
-      hideDetectedUrlPrompt();
+      exitEcoMode();
     }
     
-    await saveConfig();
-    ($("settings-modal") as HTMLElement).style.display = "none";
-    log("⚙️ Einstellungen gespeichert", "success");
-    
-    // Update presence status immediately if enabled/disabled
+    // Apply Discord RPC immediately
     if (config.discord_rpc) {
-      updateDiscordPresence("Ready to download", "Settings updated");
+      updateDiscordPresence("Ready to download", "Settings saved");
     } else {
       invoke("update_discord_presence", { details: "", stateMsg: "" });
     }
+    
+    await saveConfigImmediate();
+    ($("settings-modal") as HTMLElement).style.display = "none";
+    log("⚙️ Einstellungen gespeichert", "success");
   });
 
   on("check-update-btn", "click", () => checkForUpdates(true));
@@ -1497,7 +1498,7 @@ function updateTotalProgress(currentTrackIndex?: number, trackPercent?: number) 
   if (nextActive) {
     nextActive.classList.add("active");
     // Auto-scroll sidebar to keep current track visible
-    if (config.auto_scroll_log !== false) {
+    if (config.auto_scroll_tracks !== false) {
       nextActive.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }
@@ -1689,14 +1690,16 @@ function exitEcoMode() {
   console.log("[ECO] Eco-Mode deaktiviert – Volle Leistung");
 }
 
-const saveConfig = debounce(async () => {
+async function saveConfigImmediate() {
   try {
     await invoke("save_config", { config });
   } catch (e) {
     console.error("Failed to save config:", e);
     log(`Config konnte nicht gespeichert werden: ${e}`, "warning");
   }
-}, 500);
+}
+
+const saveConfig = debounce(saveConfigImmediate, 500);
 
 // ─── Translations ────────────────────────────────────────────────────────────
 

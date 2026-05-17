@@ -70,6 +70,8 @@
   "system_dependencies_missing": "Brakuje wymaganych komponentów systemu. Proszę je zainstalować.",
   "auto_scroll_log": "Auto-Scroll w logach",
   "auto_scroll_desc": "Automatycznie przewija do nowych wpisów w logach.",
+  "auto_scroll_tracks": "Auto-przewijanie playlisty",
+  "auto_scroll_tracks_desc": "Automatycznie przewija listę do aktualnie aktywnego utworu.",
   "eco_mode": "Tryb Eco (Standby)",
   "eco_mode_desc": "Redukuje zużycie CPU w tle.",
   "tv_mode": "Tryb TV",

@@ -70,6 +70,8 @@
   "system_dependencies_missing": "Required system components are missing. Please install them.",
   "auto_scroll_log": "Auto-Scroll Log",
   "auto_scroll_desc": "Automatically scroll to new log entries.",
+  "auto_scroll_tracks": "Auto-Scroll Playlist",
+  "auto_scroll_tracks_desc": "Automatically scroll to the active track in the list.",
   "eco_mode": "Eco-Mode (Standby)",
   "eco_mode_desc": "Reduces CPU usage when running in the background.",
   "tv_mode": "TV Mode",
