@@ -426,8 +426,8 @@ async fn search_videos(query: String) -> Result<PlaylistInfo, String> {
 
 #[tauri::command]
 async fn get_trending_videos() -> Result<PlaylistInfo, String> {
-    // YouTube Music Trending Charts
-    let url = "https://www.youtube.com/feed/trending?bp=4gINGgt5dG1hX2NoYXJ0cw%3D%3D".to_string();
+    // YouTube Music Trending Charts (Top 100 Music Videos Global)
+    let url = "https://www.youtube.com/playlist?list=PL4fGSI1pDJn6jXS_Tv_N9B8Z0HTRVJE0m".to_string();
     get_playlist_info(url, None).await
 }
 

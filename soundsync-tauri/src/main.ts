@@ -147,6 +147,17 @@ function setupElements() {
 // ─── Tabs ────────────────────────────────────────────────────────────────────
 function setupTabs() {
   const tabs = document.querySelectorAll(".tab-btn");
+  const indicator = document.getElementById("nav-indicator");
+
+  function updateIndicator(tab: HTMLElement) {
+    if (!indicator) return;
+    
+    // Position relativ zum padding des nav-tabs (da nav-tabs position: relative hat)
+    const offsetLeft = tab.offsetLeft;
+    indicator.style.transform = `translateX(${offsetLeft}px)`;
+    indicator.style.width = `${tab.offsetWidth}px`;
+  }
+
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
       const targetId = tab.getAttribute("data-tab");
@@ -155,6 +166,7 @@ function setupTabs() {
       // Update buttons
       tabs.forEach(t => t.classList.remove("active"));
       tab.classList.add("active");
+      updateIndicator(tab as HTMLElement);
 
       // Update content
       document.querySelectorAll(".tab-content").forEach(content => {
@@ -167,6 +179,18 @@ function setupTabs() {
         loadTrending();
       }
     });
+  });
+
+  // Initialize indicator position
+  setTimeout(() => {
+    const activeTab = document.querySelector(".tab-btn.active") as HTMLElement;
+    if (activeTab) updateIndicator(activeTab);
+  }, 50);
+
+  // Update on window resize
+  window.addEventListener("resize", () => {
+    const activeTab = document.querySelector(".tab-btn.active") as HTMLElement;
+    if (activeTab) updateIndicator(activeTab);
   });
 }
 
@@ -275,7 +299,12 @@ async function loadTrending() {
     const info = await invoke<PlaylistInfo>("get_trending_videos");
     renderResults(info.entries, resultsGrid);
   } catch (e) {
-    resultsGrid.innerHTML = `<div class="empty-state"><p class="status-text error">Fehler beim Laden der Trends: ${e}</p></div>`;
+    resultsGrid.innerHTML = `<div class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.5" opacity="0.8">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <p class="status-text error" style="max-width: 400px; word-break: break-word;">Fehler beim Laden der Trends: ${e}</p>
+    </div>`;
   }
 }
 
