@@ -137,7 +137,7 @@ pub async fn get_playlist_info(
         "--no-color".to_string(),
         "--windows-filenames".to_string(),
         "--extractor-args".to_string(),
-        "youtube:player_client=android".to_string(),
+        "youtube:player_client=ios,web_embedded".to_string(),
     ];
 
     if let Some(ref cp) = cookies_path {
@@ -289,7 +289,7 @@ pub async fn download_track(
         "-o".to_string(),
         format!("{}/%(title)s.%(ext)s", folder),
         "--extractor-args".to_string(),
-        "youtube:player_client=android".to_string(), // Bypass some DRM
+        "youtube:player_client=ios,web_embedded".to_string(), // Bypass some DRM
         "--postprocessor-args".to_string(),
         "ffmpeg:-threads 0".to_string(),
     ];
