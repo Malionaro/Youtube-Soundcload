@@ -118,5 +118,7 @@
   "ai_tagging": "🏷️ Tagowanie AI i okładki",
   "ai_tagging_desc": "Automatycznie osadza metadane i okładki w plikach.",
   "discord_rpc": "Discord Rich Presence",
-  "discord_rpc_desc": "Pokaż swój aktualny status pobierania na Discordzie."
+  "discord_rpc_desc": "Pokaż swój aktualny status pobierania na Discordzie.",
+  "ytdlp_pot_title": "Wtyczki PO-Token-Provider",
+  "ytdlp_pot_desc": "Istnieją rozszerzenia dla yt-dlp (takie jak bgutil-ytdlp-pot-provider), które automatycznie generują poprawne tokeny PO w tle. W razie potrzeby można je zintegrować z yt-dlp."
 }

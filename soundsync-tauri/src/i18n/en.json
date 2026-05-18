@@ -118,5 +118,7 @@
   "ai_tagging": "🏷️ AI Tagging & Covers",
   "ai_tagging_desc": "Automatically embeds metadata and cover images into the files.",
   "discord_rpc": "Discord Rich Presence",
-  "discord_rpc_desc": "Show your current download status in Discord."
+  "discord_rpc_desc": "Show your current download status in Discord.",
+  "ytdlp_pot_title": "PO-Token-Provider Plugins",
+  "ytdlp_pot_desc": "There are plugins for yt-dlp (such as bgutil-ytdlp-pot-provider) that automatically generate valid PO-Tokens in the background. These can be integrated into yt-dlp if needed."
 }
