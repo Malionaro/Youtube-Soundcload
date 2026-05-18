@@ -281,6 +281,9 @@ async function init() {
   setupTabs();
   checkSystem();
   log(`🎵 SoundSync Downloader v${appVersion} ready`, "success");
+  
+  // Auto-check for updates on startup
+  setTimeout(() => checkForUpdates(false), 2000);
 }
 
 // ─── Search & Trending ───────────────────────────────────────────────────────
@@ -416,59 +419,60 @@ async function checkForUpdates(manual: boolean = false) {
       tag.textContent = "Update verfügbar!";
       tag.className = "status-tag update-available";
       
-      if (manual) {
-        // Find the installer asset (.msi or .exe)
-        const assets = data.assets || [];
-        const installerAsset = assets.find((a: any) => 
-          a.name.endsWith(".msi") || a.name.endsWith(".exe")
-        );
+      // Always prompt if there's an update, regardless of `manual`
+      // Find the installer asset (.msi or .exe)
+      const assets = data.assets || [];
+      const installerAsset = assets.find((a: any) => 
+        a.name.endsWith(".msi") || a.name.endsWith(".exe")
+      );
 
-        if (installerAsset) {
-          const confirmed = await confirm(
-            `Version ${latestVersion} ist verfügbar!\n\nMöchtest du das Update jetzt herunterladen und installieren?\n\nDatei: ${installerAsset.name}`,
-            { title: "Update verfügbar", kind: "info" }
-          );
-          
-          if (confirmed) {
-            tag.textContent = "Lade herunter...";
-            tag.className = "status-tag checking";
+      if (installerAsset) {
+        const confirmed = await confirm(
+          `Version ${latestVersion} ist verfügbar!\n\nMöchtest du das Update jetzt herunterladen und installieren?\n\nDatei: ${installerAsset.name}`,
+          { title: "Update verfügbar", kind: "info" }
+        );
+        
+        if (confirmed) {
+          tag.textContent = "Lade herunter...";
+          tag.className = "status-tag checking";
+          if (btn) {
             btn.textContent = "⏬ Wird heruntergeladen...";
             btn.disabled = true;
-            log(`📥 Update ${latestVersion} wird heruntergeladen...`, "info");
+          }
+          log(`📥 Update ${latestVersion} wird heruntergeladen...`, "info");
 
-            try {
-              await invoke("download_and_install_update", {
-                downloadUrl: installerAsset.browser_download_url,
-                filename: installerAsset.name,
-              });
-              
-              tag.textContent = "Installiert!";
-              tag.className = "status-tag update-available";
-              log("✅ Installer gestartet – App wird geschlossen...", "success");
-            } catch (installErr) {
-              tag.textContent = "Fehler";
-              tag.className = "status-tag error";
-              log(`❌ Installation fehlgeschlagen: ${installErr}`, "error");
-              
-              // Fallback: Open download page
-              const fallback = await confirm(
-                "Automatische Installation fehlgeschlagen. Möchtest du die Download-Seite öffnen?",
-                { title: "Fehler", kind: "warning" }
-              );
-              if (fallback) {
-                await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
-              }
+          try {
+            await invoke("download_and_install_update", {
+              downloadUrl: installerAsset.browser_download_url,
+              filename: installerAsset.name,
+            });
+            
+            tag.textContent = "Installiert!";
+            tag.className = "status-tag update-available";
+            log("✅ Installer gestartet – App wird geschlossen...", "success");
+          } catch (installErr) {
+            tag.textContent = "Fehler";
+            tag.className = "status-tag error";
+            log(`❌ Installation fehlgeschlagen: ${installErr}`, "error");
+            
+            // Fallback: Open download page
+            const fallback = await confirm(
+              "Automatische Installation fehlgeschlagen. Möchtest du die Download-Seite öffnen?",
+              { title: "Fehler", kind: "warning" }
+            );
+            if (fallback) {
+              await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
             }
           }
-        } else {
-          // No installer asset found, fallback to opening the page
-          const confirmed = await confirm(
-            `Version ${latestVersion} ist verfügbar. Kein Installer gefunden – möchtest du die Download-Seite öffnen?`,
-            { title: "Update verfügbar", kind: "info" }
-          );
-          if (confirmed) {
-            await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
-          }
+        }
+      } else {
+        // No installer asset found, fallback to opening the page
+        const confirmed = await confirm(
+          `Version ${latestVersion} ist verfügbar. Kein Installer gefunden – möchtest du die Download-Seite öffnen?`,
+          { title: "Update verfügbar", kind: "info" }
+        );
+        if (confirmed) {
+          await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
         }
       }
     } else {
