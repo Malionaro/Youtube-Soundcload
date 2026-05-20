@@ -1,5 +1,6 @@
 pub mod models;
 pub mod spotify;
+pub mod applemusic;
 pub mod server;
 pub mod utils;
 pub mod commands;
@@ -121,7 +122,8 @@ pub fn run() {
             ss_start_remote_server,
             download_and_install_update,
             search_videos,
-            get_trending_videos
+            get_trending_videos,
+            import_playlist_tracks
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

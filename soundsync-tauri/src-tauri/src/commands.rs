@@ -1,6 +1,7 @@
 use crate::models::*;
 use crate::utils::*;
 use crate::spotify::*;
+use crate::applemusic::*;
 
 use tauri::{AppHandle, Emitter, State, Manager};
 use std::fs;
@@ -128,6 +129,8 @@ pub async fn get_playlist_info(
         } else {
             resolved_url = resolve_spotify_url(&resolved_url).await?;
         }
+    } else if resolved_url.contains("music.apple.com") {
+        return resolve_apple_music_playlist(&resolved_url).await;
     }
     let mut args = vec![
         "--flat-playlist".to_string(),
@@ -920,4 +923,18 @@ pub async fn download_and_install_update(
     });
 
     Ok("Installer started".to_string())
+}
+
+#[tauri::command]
+pub async fn import_playlist_tracks(url: String) -> Result<PlaylistInfo, String> {
+    if url.contains("spotify.com") {
+        if url.contains("/playlist/") || url.contains("/album/") {
+            return resolve_spotify_playlist(&url).await;
+        } else {
+            return Err("Bitte gib einen Link zu einer Spotify Playlist oder einem Album ein.".to_string());
+        }
+    } else if url.contains("music.apple.com") {
+        return resolve_apple_music_playlist(&url).await;
+    }
+    Err("Nicht unterstützte URL. Bitte gib eine Spotify oder Apple Music Playlist ein.".to_string())
 }

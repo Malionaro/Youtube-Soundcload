@@ -105,6 +105,14 @@ let ecoModeActive = false;
 let isTvMode = false;
 let currentTranslations: Record<string, string> = {};
 
+let isBatchQueueMode = false;
+interface QueueItem {
+  url: string;
+  title: string;
+  source: "clipboard" | "extension" | "manual";
+}
+let clipboardQueue: QueueItem[] = [];
+
 // ─── DOM Elements ────────────────────────────────────────────────────────────
 const $ = (id: string) => (document.getElementById(id) || document.createElement("div")) as HTMLElement;
 const maybeElement = (id: string) => document.getElementById(id);
@@ -127,6 +135,13 @@ let downloadProgress: HTMLElement;
 let convertProgress: HTMLElement;
 let totalProgress: HTMLElement;
 
+let queueBadge: HTMLElement;
+let queueList: HTMLElement;
+let queueManualInput: HTMLInputElement;
+let queueManualAddBtn: HTMLButtonElement;
+let queueDownloadAllBtn: HTMLButtonElement;
+let queueClearAllBtn: HTMLButtonElement;
+
 function setupElements() {
   try {
     urlInput = getEl("url-input");
@@ -143,6 +158,13 @@ function setupElements() {
     downloadProgress = getEl("download-progress");
     convertProgress = getEl("convert-progress");
     totalProgress = getEl("total-progress");
+
+    queueBadge = getEl("queue-badge");
+    queueList = getEl("queue-list");
+    queueManualInput = getEl("queue-manual-input") as HTMLInputElement;
+    queueManualAddBtn = getEl("queue-manual-add-btn") as HTMLButtonElement;
+    queueDownloadAllBtn = getEl("queue-download-all-btn") as HTMLButtonElement;
+    queueClearAllBtn = getEl("queue-clear-all-btn") as HTMLButtonElement;
   } catch (e) {
     console.error("Kritischer Fehler: Wichtige UI-Elemente fehlen!", e);
   }
@@ -641,7 +663,46 @@ function setupEventListeners() {
   }
 
   on("detected-url-use", "click", useDetectedUrl);
+  on("detected-url-add", "click", () => {
+    if (pendingDetectedUrl) {
+      addToQueue(pendingDetectedUrl, "clipboard");
+      hideDetectedUrlPrompt();
+    }
+  });
   on("detected-url-dismiss", "click", hideDetectedUrlPrompt);
+
+  on("queue-manual-input", "input", checkPlaylistUrlInput);
+
+  on("queue-manual-add-btn", "click", () => {
+    const url = queueManualInput.value.trim();
+    if (url) {
+      const isPlaylist = queueManualAddBtn.classList.contains("btn-import-active");
+      if (isPlaylist) {
+        importPlaylist(url);
+      } else {
+        addToQueue(url, "manual");
+        queueManualInput.value = "";
+      }
+    }
+  });
+
+  on("queue-manual-input", "keypress", (e: KeyboardEvent) => {
+    if (e.key === "Enter") {
+      const url = queueManualInput.value.trim();
+      if (url) {
+        const isPlaylist = queueManualAddBtn.classList.contains("btn-import-active");
+        if (isPlaylist) {
+          importPlaylist(url);
+        } else {
+          addToQueue(url, "manual");
+          queueManualInput.value = "";
+        }
+      }
+    }
+  });
+
+  on("queue-download-all-btn", "click", startBatchDownload);
+  on("queue-clear-all-btn", "click", clearQueue);
   
   on("clear-url-btn", "click", () => {
     if (isDownloading) return;
@@ -1062,28 +1123,42 @@ function setupTauriListeners() {
     const p = event.payload;
     console.log("Remote URL received:", p.url);
 
-    urlInput.value = p.url || "";
-    
-    if (p.format) {
-      if (p.format === "audio") {
-        formatSelect.value = "mp3";
-      } else if (p.format === "video") {
-        formatSelect.value = "mp4";
-      } else {
-        formatSelect.value = p.format;
-      }
-      formatSelect.dispatchEvent(new Event("change"));
-    }
-
-    updateDownloadBtnState();
-    log(`📱 Link vom Gerät empfangen: ${p.url}`, "success");
-
     if (p.autoStart) {
+      urlInput.value = p.url || "";
+      if (p.format) {
+        if (p.format === "audio") {
+          formatSelect.value = "mp3";
+        } else if (p.format === "video") {
+          formatSelect.value = "mp4";
+        } else {
+          formatSelect.value = p.format;
+        }
+        formatSelect.dispatchEvent(new Event("change"));
+      }
+      updateDownloadBtnState();
+      log(`📱 Link vom Gerät empfangen: ${p.url}`, "success");
       if (!downloadBtn.disabled && !isDownloading) {
         log(`🚀 Automatischer Download gestartet...`, "info");
         startDownload();
       } else {
         log(`⚠️ Auto-Start abgebrochen: Ordner fehlt oder Download läuft bereits.`, "warning");
+      }
+    } else {
+      addToQueue(p.url, "extension");
+      log(`🔌 Link von Browser-Extension erhalten und in Sammelkorb gelegt`, "success");
+      
+      // Native notification that it was added
+      try {
+        isPermissionGranted().then(granted => {
+          if (granted) {
+            sendNotification({
+              title: "SoundSync Browser-Extension",
+              body: `Link erfolgreich in Sammelkorb gelegt: ${p.url}`,
+            });
+          }
+        });
+      } catch {
+        // Ignore notification errors
       }
     }
   });
@@ -1180,12 +1255,234 @@ async function notifyDetectedUrl(url: string) {
   }
 }
 
+// ─── Clipboard Queue (Sammelkorb) Logic ──────────────────────────────────────
+function addToQueue(url: string, source: "clipboard" | "extension" | "manual", title?: string) {
+  // Simple validation to ensure it looks like a URL
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    log(`⚠️ Ungültiger Link: ${url}`, "warning");
+    return;
+  }
+
+  // Check duplicate
+  if (clipboardQueue.some(item => item.url === url)) {
+    log(`ℹ️ Link bereits im Sammelkorb: ${url}`, "info");
+    return;
+  }
+
+  // Deduce a nice placeholder title
+  let inferredTitle = title || "";
+  if (!inferredTitle) {
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase();
+      if (host.includes("youtube.com") || host.includes("youtu.be")) {
+        inferredTitle = "YouTube Video / Musik";
+      } else if (host.includes("soundcloud.com")) {
+        inferredTitle = "SoundCloud Track";
+      } else {
+        inferredTitle = "Anderer Musik-Link";
+      }
+    } catch {
+      inferredTitle = "Musik-Link";
+    }
+  }
+
+  clipboardQueue.push({ url, title: inferredTitle, source });
+  log(`📥 Link zum Korb hinzugefügt: ${inferredTitle}`, "success");
+  
+  // Play dynamic scale animation on queue badge
+  if (queueBadge) {
+    queueBadge.textContent = clipboardQueue.length.toString();
+    queueBadge.style.display = "flex";
+    
+    // Trigger pop animation
+    queueBadge.style.animation = "none";
+    queueBadge.offsetHeight; // force reflow
+    queueBadge.style.animation = "badgePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards";
+  }
+
+  renderQueue();
+}
+
+function renderQueue() {
+  if (!queueList) return;
+
+  if (clipboardQueue.length === 0) {
+    queueList.innerHTML = `
+      <div class="empty-state">
+         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+           <line x1="9" y1="9" x2="15" y2="9"/>
+           <line x1="9" y1="13" x2="15" y2="13"/>
+           <line x1="9" y1="17" x2="15" y2="17"/>
+         </svg>
+         <p id="queue-empty-state-text" data-i18n="queue_empty_state">${_("queue_empty_state")}</p>
+      </div>
+    `;
+    
+    queueDownloadAllBtn.disabled = true;
+    queueClearAllBtn.disabled = true;
+    if (queueBadge) {
+      queueBadge.style.display = "none";
+    }
+    return;
+  }
+
+  queueDownloadAllBtn.disabled = false;
+  queueClearAllBtn.disabled = false;
+  
+  if (queueBadge) {
+    queueBadge.textContent = clipboardQueue.length.toString();
+    queueBadge.style.display = "flex";
+  }
+
+  queueList.innerHTML = "";
+  clipboardQueue.forEach((item, idx) => {
+    const card = document.createElement("div");
+    card.className = "queue-card";
+    card.style.animationDelay = `${idx * 0.05}s`;
+
+    // Deduce source icon and class
+    let sourceClass = "accent";
+    let sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+    
+    if (item.url.includes("youtube.com") || item.url.includes("youtu.be")) {
+      sourceClass = "youtube";
+      sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25a29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>`;
+    } else if (item.url.includes("soundcloud.com")) {
+      sourceClass = "soundcloud";
+      sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 1 8.89Z"/></svg>`;
+    } else if (item.source === "extension") {
+      sourceClass = "extension";
+      sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>`;
+    }
+
+    card.innerHTML = `
+      <div class="queue-card-source ${sourceClass}">
+         ${sourceIcon}
+      </div>
+      <div class="queue-card-info">
+         <input type="text" class="queue-card-title-input" value="${escapeHtml(item.title)}" placeholder="Titel bearbeiten..." />
+         <span class="queue-card-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</span>
+      </div>
+      <div class="queue-card-actions">
+         <button class="queue-card-remove" title="Aus Korb löschen" data-idx="${idx}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+         </button>
+      </div>
+    `;
+
+    // Handle Title edits in real-time
+    const titleInput = card.querySelector(".queue-card-title-input") as HTMLInputElement;
+    titleInput.addEventListener("input", (e) => {
+      item.title = (e.target as HTMLInputElement).value;
+    });
+
+    // Handle single item deletion
+    card.querySelector(".queue-card-remove")?.addEventListener("click", () => {
+      clipboardQueue.splice(idx, 1);
+      log(`🗑️ Link aus Korb entfernt`, "info");
+      renderQueue();
+    });
+
+    queueList.appendChild(card);
+  });
+}
+
+function clearQueue() {
+  clipboardQueue = [];
+  log("🧹 Sammelkorb vollständig geleert", "info");
+  renderQueue();
+}
+
+function startBatchDownload() {
+  if (clipboardQueue.length === 0) return;
+
+  log(`🚀 Batch-Download von ${clipboardQueue.length} Titeln aus Sammelkorb gestartet...`, "info");
+
+  // Map to playlist entries
+  playlistEntries = clipboardQueue.map((item, idx) => ({
+    title: item.title,
+    url: item.url,
+    thumbnail: null,
+    duration: null,
+    index: idx + 1
+  }));
+
+  // Clear queue
+  clipboardQueue = [];
+  renderQueue();
+
+  // Set mode flag and visual settings
+  isBatchQueueMode = true;
+  urlInput.value = "Sammelkorb Batch-Download";
+  updateDownloadBtnState();
+
+  // Visually switch to the downloader tab
+  const downloaderTabBtn = document.querySelector('.tab-btn[data-tab="downloader-tab"]') as HTMLElement;
+  if (downloaderTabBtn) {
+    downloaderTabBtn.click();
+  }
+
+  // Trigger download process!
+  startDownload();
+}
+
+function checkPlaylistUrlInput() {
+  const url = queueManualInput.value.trim();
+  const textSpan = document.getElementById("queue-manual-add-btn-text");
+  if (!textSpan) return;
+
+  const isPlaylist = (url.includes("spotify.com") && (url.includes("/playlist/") || url.includes("/album/"))) ||
+                     (url.includes("music.apple.com") && (url.includes("/playlist/") || url.includes("/album/")));
+
+  if (isPlaylist) {
+    queueManualAddBtn.classList.add("btn-import-active");
+    textSpan.textContent = _("queue_import_playlist");
+  } else {
+    queueManualAddBtn.classList.remove("btn-import-active");
+    textSpan.textContent = _("queue_manual_add");
+  }
+}
+
+async function importPlaylist(url: string) {
+  const textSpan = document.getElementById("queue-manual-add-btn-text");
+  if (!textSpan) return;
+
+  try {
+    queueManualInput.disabled = true;
+    queueManualAddBtn.disabled = true;
+    textSpan.innerHTML = `<span class="btn-spinner"></span>${_("queue_loading_playlist")}`;
+    log(`📥 Importiere Playlist: ${url}`, "info");
+
+    const playlistInfo = await invoke<PlaylistInfo>("import_playlist_tracks", { url });
+    let count = 0;
+    for (const entry of playlistInfo.entries) {
+      if (!clipboardQueue.some(item => item.url === entry.url)) {
+        clipboardQueue.push({
+          url: entry.url,
+          title: entry.title,
+          source: "manual"
+        });
+        count++;
+      }
+    }
+    renderQueue();
+    log(`✅ Erfolgreich ${count} von ${playlistInfo.total} Titeln aus "${playlistInfo.title}" importiert!`, "success");
+    queueManualInput.value = "";
+  } catch (e) {
+    log(`❌ Playlist-Import fehlgeschlagen: ${e}`, "error");
+  } finally {
+    queueManualInput.disabled = false;
+    queueManualAddBtn.disabled = false;
+    checkPlaylistUrlInput();
+  }
+}
+
 // ─── Download Logic ──────────────────────────────────────────────────────────
 async function startDownload() {
   let url = urlInput.value.trim();
   if (!url || !config.download_folder) return;
-
-  // ... (Spotify logic)
 
   isDownloading = true;
   downloadBtn.disabled = true;
@@ -1193,9 +1490,14 @@ async function startDownload() {
   formatSelect.disabled = true;
   (getEl("convert-btn") as HTMLButtonElement).disabled = true;
   completedTracks = 0;
-  totalTracks = 0;
   startTime = Date.now();
-  playlistEntries = [];
+  
+  if (!isBatchQueueMode) {
+    playlistEntries = [];
+    totalTracks = 0;
+  } else {
+    totalTracks = playlistEntries.length;
+  }
 
   // Clear track list (keep empty state)
   trackList.querySelectorAll(".track-card").forEach(el => el.remove());
@@ -1210,20 +1512,26 @@ async function startDownload() {
   try {
     await invoke("reset_download_cancel");
 
-    // Step 1: Get playlist info
-    const info = await invoke<PlaylistInfo>("get_playlist_info", {
-      url,
-      cookiesPath: config.cookies_path || null,
-    });
+    if (!isBatchQueueMode) {
+      // Step 1: Get playlist info
+      const info = await invoke<PlaylistInfo>("get_playlist_info", {
+        url,
+        cookiesPath: config.cookies_path || null,
+      });
 
-    totalTracks = info.total;
-    playlistEntries = info.entries;
+      totalTracks = info.total;
+      playlistEntries = info.entries;
+    }
+    
+    // Reset batch queue mode flag
+    isBatchQueueMode = false;
+
     log(_("tracks_found", { count: String(totalTracks) }), "success");
     $("progress-label").textContent = _("tracks_found", { count: String(totalTracks) });
 
     // Add track cards
     $("empty-state").style.display = "none";
-    for (const entry of info.entries) {
+    for (const entry of playlistEntries) {
       addTrackCard(entry);
     }
 

@@ -120,5 +120,15 @@
   "discord_rpc": "Discord Rich Presence",
   "discord_rpc_desc": "Zeige deinen aktuellen Download-Status in Discord an.",
   "ytdlp_pot_title": "PO-Token-Provider Plugins",
-  "ytdlp_pot_desc": "Es gibt Erweiterungen für yt-dlp (wie bgutil-ytdlp-pot-provider), die im Hintergrund automatisch gültige PO-Tokens generieren. Diese können bei Bedarf in yt-dlp integriert werden."
+  "ytdlp_pot_desc": "Es gibt Erweiterungen für yt-dlp (wie bgutil-ytdlp-pot-provider), die im Hintergrund automatisch gültige PO-Tokens generieren. Diese können bei Bedarf in yt-dlp integriert werden.",
+  "tab_queue": "Sammelkorb",
+  "queue_title": "📥 Sammelkorb / Warteschlange",
+  "queue_desc": "Hier werden im Hintergrund kopierte oder von der Extension gesendete Links gesammelt.",
+  "queue_download_all": "Alle herunterladen",
+  "queue_clear_all": "Korb leeren",
+  "queue_empty_state": "Der Korb ist leer. Kopiere Links oder benutze das Add-on.",
+  "add_to_queue": "In Korb legen",
+  "queue_manual_add": "➕ Hinzufügen",
+  "queue_import_playlist": "📥 Playlist importieren",
+  "queue_loading_playlist": "⌛ Lade Playlist..."
 }

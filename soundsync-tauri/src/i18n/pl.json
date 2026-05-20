@@ -120,5 +120,15 @@
   "discord_rpc": "Discord Rich Presence",
   "discord_rpc_desc": "Pokaż swój aktualny status pobierania na Discordzie.",
   "ytdlp_pot_title": "Wtyczki PO-Token-Provider",
-  "ytdlp_pot_desc": "Istnieją rozszerzenia dla yt-dlp (takie jak bgutil-ytdlp-pot-provider), które automatycznie generują poprawne tokeny PO w tle. W razie potrzeby można je zintegrować z yt-dlp."
+  "ytdlp_pot_desc": "Istnieją rozszerzenia dla yt-dlp (takie jak bgutil-ytdlp-pot-provider), die generują poprawne tokeny PO w tle. W razie potrzeby można je zintegrować z yt-dlp.",
+  "tab_queue": "Koszyk",
+  "queue_title": "📥 Koszyk / Kolejka pobierania",
+  "queue_desc": "Tutaj zbierane są linki skopiowane w tle lub przesłane z rozszerzenia przeglądarki.",
+  "queue_download_all": "Pobierz wszystko",
+  "queue_clear_all": "Wyczyść koszyk",
+  "queue_empty_state": "Koszyk jest pusty. Skopiuj linki lub użyj rozszerzenia przeglądarki.",
+  "add_to_queue": "Dodaj do koszyka",
+  "queue_manual_add": "➕ Dodaj",
+  "queue_import_playlist": "📥 Importuj playlistę",
+  "queue_loading_playlist": "⌛ Ładowanie..."
 }

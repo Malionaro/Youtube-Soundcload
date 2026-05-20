@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "SoundSync Link Sender",
+  "version": "1.0.0",
+  "description": "Sendet YouTube und SoundCloud Links direkt an den SoundSync Downloader.",
+  "permissions": [
+    "activeTab",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "http://localhost:3030/*",
+    "http://127.0.0.1:3030/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}
