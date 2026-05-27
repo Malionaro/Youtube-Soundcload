@@ -901,38 +901,73 @@ function setupEventListeners() {
   // Install buttons
   on("install-ffmpeg-btn", "click", async (e) => {
     const btn = e.currentTarget as HTMLButtonElement;
+    if (!confirmInstall("FFmpeg", "Gyan.FFmpeg")) return;
+
+    const status = $("ffmpeg-status");
     btn.disabled = true;
-    btn.textContent = "⌛ " + _("installing");
-    log("🔧 Installing FFmpeg...", "info");
+    btn.textContent = _("installing_with_winget");
+    status.textContent = _("install_status_running", { tool: "FFmpeg", package: "Gyan.FFmpeg" });
+    log(_("install_log_start", { tool: "FFmpeg", package: "Gyan.FFmpeg" }), "info");
+    log(_("install_log_wait"), "info");
     try {
       const res = await invoke<string>("install_ffmpeg");
       log(`✅ ${res}`, "success");
       await checkSystem();
-      if (res.includes("already installed")) {
-        log("ℹ️ FFmpeg ist bereits installiert, wird aber nicht im System-Pfad gefunden. Bitte starte die App neu.", "warning");
+      if (res.toLowerCase().includes("already installed") || res.toLowerCase().includes("bereits installiert")) {
+        log(_("install_log_restart_hint", { tool: "FFmpeg" }), "warning");
       }
     } catch (err) {
+      status.textContent = _("install_failed");
       log(`❌ ${err}`, "error");
     } finally {
       btn.disabled = false;
-      btn.textContent = "FFmpeg installieren";
+      btn.textContent = _("install_ffmpeg_btn");
     }
   });
 
   on("install-ytdlp-btn", "click", async (e) => {
     const btn = e.currentTarget as HTMLButtonElement;
+    if (!confirmInstall("yt-dlp", "yt-dlp.yt-dlp")) return;
+
+    const status = $("ytdlp-status");
     btn.disabled = true;
-    btn.textContent = "⌛ " + _("installing");
-    log("🔧 Installing yt-dlp...", "info");
+    btn.textContent = _("installing_with_winget");
+    status.textContent = _("install_status_running", { tool: "yt-dlp", package: "yt-dlp.yt-dlp" });
+    log(_("install_log_start", { tool: "yt-dlp", package: "yt-dlp.yt-dlp" }), "info");
+    log(_("install_log_wait"), "info");
     try {
       const res = await invoke<string>("install_ytdlp");
       log(`✅ ${res}`, "success");
       await checkSystem();
     } catch (err) {
+      status.textContent = _("install_failed");
       log(`❌ ${err}`, "error");
     } finally {
       btn.disabled = false;
-      btn.textContent = "yt-dlp installieren";
+      btn.textContent = _("install_ytdlp_btn");
+    }
+  });
+
+  on("install-pot-provider-btn", "click", async (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    if (!window.confirm(_("install_pot_confirm"))) return;
+
+    const status = $("pot-provider-status");
+    btn.disabled = true;
+    btn.textContent = _("installing_with_winget");
+    status.textContent = _("pot_provider_installing");
+    log(_("pot_provider_log_start"), "info");
+    log(_("pot_provider_log_detail"), "info");
+    try {
+      const res = await invoke<string>("install_pot_provider");
+      log(`✅ ${res}`, "success");
+      await checkSystem(false);
+    } catch (err) {
+      status.textContent = _("pot_provider_failed");
+      log(`❌ ${err}`, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = _("install_pot_provider_btn");
     }
   });
 
@@ -1680,6 +1715,8 @@ async function checkSystem(autoShowModal: boolean = true) {
       ffmpeg_version: string;
       ytdlp_installed: boolean;
       ytdlp_version: string;
+      pot_provider_installed: boolean;
+      pot_provider_status: string;
     }>("check_system");
 
     let isMissingDependencies = false;
@@ -1723,12 +1760,27 @@ async function checkSystem(autoShowModal: boolean = true) {
       $("system-modal").style.display = "flex";
       log("⚠️ " + _("system_dependencies_missing"), "warning");
     }
+
+    const potStatus = maybeElement("pot-provider-status");
+    const potButton = maybeElement("install-pot-provider-btn") as HTMLButtonElement | null;
+    if (potStatus) {
+      potStatus.textContent = result.pot_provider_installed
+        ? _("pot_provider_ready")
+        : result.pot_provider_status || _("pot_provider_missing");
+    }
+    if (potButton) {
+      potButton.style.display = result.pot_provider_installed ? "none" : "inline-flex";
+    }
   } catch (e) {
     log(`⚠️ System check failed: ${e}`, "warning");
   }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+function confirmInstall(tool: string, packageId: string): boolean {
+  return window.confirm(_("install_confirm", { tool, package: packageId }));
+}
+
 function log(message: string, type: string = "info") {
   const line = document.createElement("div");
   line.className = `log-line ${type}`;

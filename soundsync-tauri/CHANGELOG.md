@@ -1,3 +1,18 @@
+----------------------------**V2.3.7**----------------------------
+
+**New Features:**
+- **Transparent Tool Installation:** FFmpeg and yt-dlp install actions now clearly explain that Windows Package Manager (`winget`) is used, show the exact package IDs, and ask for confirmation before starting.
+- **Automatic PO-Token Provider Setup:** Added a one-click setup flow for `bgutil-ytdlp-pot-provider`, including plugin download, provider preparation, Node.js LTS installation when needed, and system status detection.
+- **Admin-Aware Provider Installer:** The PO-Token Provider setup now requests Windows administrator rights through UAC and writes an installation log to `%TEMP%\soundsync-pot-provider-install.log`.
+
+**Bug Fixes & UX Improvements:**
+- **PowerShell UAC Fix:** Fixed the elevated PO-Token Provider installer by removing unsupported redirected output parameters from `Start-Process -Verb RunAs`.
+- **System Check Upgrade:** The system check now reports whether the PO-Token Provider is ready or which setup pieces are missing.
+- **Defender-Safe Transparency:** The setup flow does not disable or bypass Windows Defender; users are told when Windows may ask for explicit approval.
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.7` across the app metadata and UI.
+
+----------------------------**V2.3.7**----------------------------
+
 ----------------------------**V2.3.6**----------------------------
 
 **New Features:**

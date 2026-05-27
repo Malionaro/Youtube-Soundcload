@@ -1116,6 +1116,49 @@ input:checked + .toggle-track::after {
   word-break: break-all; /* Für lange Versions-Strings */
 }
 
+.install-explain-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.install-explain-box strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.install-details {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.pot-provider-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.pot-provider-status {
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 180px;
+  flex: 1;
+}
+
 .check-icon.loading {
   animation: rotate 2s linear infinite;
 }

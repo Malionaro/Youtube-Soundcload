@@ -107,13 +107,71 @@ pub async fn update_discord_presence(
 pub fn check_system() -> SystemCheckResult {
     let (ffmpeg_installed, ffmpeg_version) = check_tool("ffmpeg", &["-version"]);
     let (ytdlp_installed, ytdlp_version) = check_tool("yt-dlp", &["--version"]);
+    let (pot_provider_installed, pot_provider_status) = check_pot_provider_files();
 
     SystemCheckResult {
         ffmpeg_installed,
         ffmpeg_version,
         ytdlp_installed,
         ytdlp_version,
+        pot_provider_installed,
+        pot_provider_status,
     }
+}
+
+#[cfg(target_os = "windows")]
+fn check_pot_provider_files() -> (bool, String) {
+    let appdata = match std::env::var("APPDATA") {
+        Ok(value) => PathBuf::from(value),
+        Err(_) => return (false, "APPDATA nicht gefunden".to_string()),
+    };
+    let home = match std::env::var("USERPROFILE") {
+        Ok(value) => PathBuf::from(value),
+        Err(_) => return (false, "USERPROFILE nicht gefunden".to_string()),
+    };
+
+    let plugin_zip = appdata
+        .join("yt-dlp-plugins")
+        .join("bgutil-ytdlp-pot-provider.zip");
+    let provider_script = home
+        .join("bgutil-ytdlp-pot-provider")
+        .join("server")
+        .join("build")
+        .join("generate_once.js");
+    let (node_available, node_version) = check_tool("node", &["--version"]);
+
+    if plugin_zip.exists() && provider_script.exists() && node_available {
+        (
+            true,
+            format!(
+                "Aktiv: Plugin installiert, Provider-Script gebaut, Node {}",
+                node_version
+            ),
+        )
+    } else {
+        let mut missing = Vec::new();
+        if !plugin_zip.exists() {
+            missing.push("Plugin-ZIP");
+        }
+        if !provider_script.exists() {
+            missing.push("Provider-Script");
+        }
+        if !node_available {
+            missing.push("Node.js");
+        }
+        (
+            false,
+            format!("Nicht eingerichtet: {} fehlt", missing.join(", ")),
+        )
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn check_pot_provider_files() -> (bool, String) {
+    (
+        false,
+        "Auto-Setup für PO-Token-Provider ist derzeit nur unter Windows eingebaut".to_string(),
+    )
 }
 
 #[tauri::command]
@@ -829,6 +887,197 @@ pub async fn install_ytdlp() -> Result<String, String> {
     #[cfg(not(target_os = "windows"))]
     {
         Err("Auto-install for yt-dlp is currently only supported on Windows".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn install_pot_provider() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let script = r#"
+$ErrorActionPreference = 'Stop'
+$logFile = Join-Path $env:TEMP 'soundsync-pot-provider-install.log'
+"SoundSync PO-Token-Provider Setup gestartet: $(Get-Date)" | Out-File -FilePath $logFile -Encoding UTF8
+Write-Output "Setup-Log: $logFile"
+
+function Add-NodePath {
+  $nodeDir = Join-Path $env:ProgramFiles 'nodejs'
+  if (Test-Path $nodeDir) {
+    $env:Path = "$env:Path;$nodeDir"
+  }
+}
+
+Write-Output 'Pruefe Node.js...'
+Add-NodePath
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  Write-Output 'Node.js fehlt. Installiere OpenJS.NodeJS.LTS per winget...'
+  winget install --id=OpenJS.NodeJS.LTS -e --silent --accept-source-agreements --accept-package-agreements
+  Add-NodePath
+}
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  throw 'Node.js wurde installiert, ist aber in diesem Prozess noch nicht im PATH. Bitte App oder Windows neu starten und Setup erneut ausfuehren.'
+}
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+  Add-NodePath
+}
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+  throw 'npm wurde nicht gefunden. Bitte Node.js LTS installieren oder App neu starten.'
+}
+
+$pluginDir = Join-Path $env:APPDATA 'yt-dlp-plugins'
+New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
+$pluginZip = Join-Path $pluginDir 'bgutil-ytdlp-pot-provider.zip'
+$release = Invoke-RestMethod -UseBasicParsing 'https://api.github.com/repos/Brainicism/bgutil-ytdlp-pot-provider/releases/latest'
+$tag = $release.tag_name
+if (-not $tag) {
+  throw 'Neueste bgutil Release konnte nicht ermittelt werden.'
+}
+Write-Output "Lade yt-dlp Plugin Release $tag nach $pluginZip ..."
+Invoke-WebRequest -UseBasicParsing 'https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/latest/download/bgutil-ytdlp-pot-provider.zip' -OutFile $pluginZip
+
+$providerDir = Join-Path $env:USERPROFILE 'bgutil-ytdlp-pot-provider'
+$tmpRoot = Join-Path $env:TEMP ('soundsync-bgutil-' + [guid]::NewGuid().ToString())
+$sourceZip = Join-Path $tmpRoot 'source.zip'
+New-Item -ItemType Directory -Force -Path $tmpRoot | Out-Null
+Write-Output "Lade Provider-Quellcode nach $tmpRoot ..."
+Invoke-WebRequest -UseBasicParsing "https://github.com/Brainicism/bgutil-ytdlp-pot-provider/archive/refs/tags/$tag.zip" -OutFile $sourceZip
+Expand-Archive -Force -Path $sourceZip -DestinationPath $tmpRoot
+$extracted = Get-ChildItem $tmpRoot -Directory | Where-Object { $_.Name -like 'bgutil-ytdlp-pot-provider-*' } | Select-Object -First 1
+if (-not $extracted) {
+  throw 'Provider-Quellcode konnte nicht entpackt werden.'
+}
+if (Test-Path $providerDir) {
+  Remove-Item -LiteralPath $providerDir -Recurse -Force
+}
+Move-Item -LiteralPath $extracted.FullName -Destination $providerDir
+
+$serverDir = Join-Path $providerDir 'server'
+Write-Output "Installiere Provider-Abhaengigkeiten in $serverDir ..."
+Push-Location $serverDir
+npm install
+Write-Output 'Baue Provider-Script...'
+npx tsc
+Pop-Location
+
+$scriptPath = Join-Path $serverDir 'build\generate_once.js'
+if (-not (Test-Path $scriptPath)) {
+  throw "Provider-Script wurde nicht erzeugt: $scriptPath"
+}
+
+Remove-Item -LiteralPath $tmpRoot -Recurse -Force
+Write-Output 'PO-Token-Provider wurde eingerichtet.'
+"SoundSync PO-Token-Provider Setup abgeschlossen: $(Get-Date)" | Add-Content -Path $logFile -Encoding UTF8
+"#;
+
+        fn ps_quote(value: &str) -> String {
+            format!("'{}'", value.replace('\'', "''"))
+        }
+
+        let temp_dir = std::env::temp_dir();
+        let unique = format!(
+            "soundsync-pot-provider-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        );
+        let install_script_path = temp_dir.join(format!("{unique}.ps1"));
+        let launcher_script_path = temp_dir.join(format!("{unique}-launcher.ps1"));
+        let result_path = temp_dir.join(format!("{unique}.result.txt"));
+        let log_path = temp_dir.join("soundsync-pot-provider-install.log");
+
+        let wrapped_script = format!(
+            r#"$ErrorActionPreference = 'Stop'
+$resultPath = {result_path}
+$logFile = {log_path}
+try {{
+{script}
+  'OK' | Set-Content -Path $resultPath -Encoding UTF8
+  exit 0
+}} catch {{
+  "FEHLER: $($_.Exception.Message)" | Add-Content -Path $logFile -Encoding UTF8
+  $_ | Out-String | Add-Content -Path $logFile -Encoding UTF8
+  "ERROR: $($_.Exception.Message)" | Set-Content -Path $resultPath -Encoding UTF8
+  exit 1
+}}
+"#,
+            result_path = ps_quote(&result_path.to_string_lossy()),
+            log_path = ps_quote(&log_path.to_string_lossy()),
+            script = script
+        );
+
+        fs::write(&install_script_path, wrapped_script)
+            .map_err(|e| format!("Installationsskript konnte nicht geschrieben werden: {}", e))?;
+
+        let install_script_string = install_script_path.to_string_lossy().to_string();
+        let launcher_script_string = launcher_script_path.to_string_lossy().to_string();
+        let result_string = result_path.to_string_lossy().to_string();
+
+        let launcher = format!(
+            r#"$ErrorActionPreference = 'Stop'
+$installScript = {install_script}
+$resultPath = {result_path}
+Write-Output 'Windows fragt jetzt nach Administratorrechten fuer das PO-Token-Provider Setup.'
+$proc = Start-Process -FilePath 'powershell' -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File', $installScript) -Verb RunAs -Wait -PassThru
+if ($null -eq $proc.ExitCode) {{
+  exit 1
+}}
+if (Test-Path $resultPath) {{
+  Get-Content -Path $resultPath
+}}
+exit $proc.ExitCode
+"#,
+            install_script = ps_quote(&install_script_string),
+            result_path = ps_quote(&result_string),
+        );
+        fs::write(&launcher_script_path, launcher)
+            .map_err(|e| format!("Launcher-Skript konnte nicht geschrieben werden: {}", e))?;
+
+        let mut cmd = Command::new("powershell");
+        cmd.args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            &launcher_script_string,
+        ])
+        .creation_flags(0x08000000);
+
+        let output = cmd
+            .output()
+            .map_err(|e| format!("PowerShell konnte nicht gestartet werden: {}", e))?;
+
+        let launcher_output = command_output_text(&output);
+        let install_log = fs::read_to_string(&log_path).unwrap_or_default();
+        let output_text = [
+            launcher_output.trim(),
+            install_log.trim(),
+        ]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+        let _ = fs::remove_file(&install_script_path);
+        let _ = fs::remove_file(&launcher_script_path);
+        let _ = fs::remove_file(&result_path);
+
+        if output.status.success() {
+            Ok(format!(
+                "PO-Token-Provider erfolgreich eingerichtet.\n{}",
+                output_text
+            ))
+        } else {
+            Err(format!(
+                "PO-Token-Provider Setup fehlgeschlagen.\n{}",
+                output_text
+            ))
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Auto-Setup für PO-Token-Provider ist derzeit nur unter Windows unterstützt.".to_string())
     }
 }
 

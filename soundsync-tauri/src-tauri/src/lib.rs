@@ -116,6 +116,7 @@ pub fn run() {
             convert_file,
             install_ffmpeg,
             install_ytdlp,
+            install_pot_provider,
             open_folder,
             update_discord_presence,
             ss_get_local_ip,

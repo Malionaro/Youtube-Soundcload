@@ -152,4 +152,6 @@ pub struct SystemCheckResult {
     pub ffmpeg_version: String,
     pub ytdlp_installed: bool,
     pub ytdlp_version: String,
+    pub pot_provider_installed: bool,
+    pub pot_provider_status: String,
 }

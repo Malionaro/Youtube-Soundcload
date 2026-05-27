@@ -20,7 +20,7 @@
           <img src="/src/assets/logo.png" alt="Logo" width="28" height="28" style="border-radius: 6px;" />
         </div>
         <h1 id="app-title">SoundSync Downloader</h1>
-        <span class="version-badge" id="app-version-badge">v2.3.6</span>
+        <span class="version-badge" id="app-version-badge">v2.3.7</span>
       </div>
       <div class="header-right">
         <select id="language-select" class="language-select">
@@ -354,7 +354,7 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
           GitHub
         </a>
-        <span id="footer-version">Version: 2.3.6</span>
+        <span id="footer-version">Version: 2.3.7</span>
       </div>
     </footer>
 
@@ -439,27 +439,37 @@
           <button class="modal-close" id="system-modal-close">✕</button>
         </div>
         <div class="modal-body">
+          <div class="install-explain-box">
+            <strong data-i18n="install_transparency_title">Was passiert beim Installieren?</strong>
+            <span data-i18n="install_transparency_desc">SoundSync startet Windows Package Manager (winget), akzeptiert die Paketbedingungen und installiert das gewählte Tool in deinen Benutzer-/System-Pfad. Je nach Windows-Konfiguration kann kurz ein Installer oder eine UAC-Abfrage erscheinen. Danach prüft SoundSync die Installation erneut.</span>
+          </div>
           <div class="check-item" id="ffmpeg-check">
             <div class="check-icon loading">⏳</div>
             <div class="check-info">
               <strong>FFmpeg</strong>
               <span id="ffmpeg-status">Prüfe...</span>
+              <small class="install-details">winget: Gyan.FFmpeg</small>
             </div>
-            <button id="install-ffmpeg-btn" class="btn btn-small btn-primary" style="display:none">Installieren</button>
+            <button id="install-ffmpeg-btn" class="btn btn-small btn-primary" style="display:none" data-i18n="install_ffmpeg_btn">FFmpeg per winget installieren</button>
           </div>
           <div class="check-item" id="ytdlp-check">
             <div class="check-icon loading">⏳</div>
             <div class="check-info">
               <strong>yt-dlp</strong>
               <span id="ytdlp-status">Prüfe...</span>
+              <small class="install-details">winget: yt-dlp.yt-dlp</small>
             </div>
-            <button id="install-ytdlp-btn" class="btn btn-small btn-primary" style="display:none">Installieren</button>
+            <button id="install-ytdlp-btn" class="btn btn-small btn-primary" style="display:none" data-i18n="install_ytdlp_btn">yt-dlp per winget installieren</button>
           </div>
           <div class="system-tip-box" style="margin-top: 16px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; font-size: 11px; line-height: 1.4; color: var(--text-sub);">
             <div style="font-weight: 700; color: var(--text-main); margin-bottom: 4px; display: flex; align-items: center; gap: 5px;">
               <span style="font-size:12px;">💡</span> <span id="ytdlp-pot-title" data-i18n="ytdlp_pot_title">PO-Token-Provider Plugins</span>
             </div>
             <p id="ytdlp-pot-desc" data-i18n="ytdlp_pot_desc">Es gibt Erweiterungen für yt-dlp (wie bgutil-ytdlp-pot-provider), die im Hintergrund automatisch gültige PO-Tokens generieren. Diese können bei Bedarf in yt-dlp integriert werden.</p>
+            <div class="pot-provider-actions">
+              <span id="pot-provider-status" class="pot-provider-status">Prüfe...</span>
+              <button id="install-pot-provider-btn" class="btn btn-small btn-secondary" data-i18n="install_pot_provider_btn">PO-Token-Provider automatisch einrichten</button>
+            </div>
           </div>
         </div>
       </div>
@@ -572,7 +582,7 @@
 
           <div class="version-info-section">
             <div class="version-header">
-               <span id="current-version-text"><span data-i18n="current_version">Aktuelle Version: </span><span id="update-current-version">2.3.6</span></span>
+               <span id="current-version-text"><span data-i18n="current_version">Aktuelle Version: </span><span id="update-current-version">2.3.7</span></span>
                <span id="update-status-tag" class="status-tag" data-i18n="up_to_date">Aktuell</span>
             </div>
             <button id="check-update-btn" class="btn btn-secondary btn-full">
