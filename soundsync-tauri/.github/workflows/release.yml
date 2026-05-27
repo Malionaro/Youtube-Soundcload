@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [windows-latest]
+        platform: [windows-latest, macos-latest, ubuntu-22.04]
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -26,6 +26,12 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libwebkit2gtk-4.0-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
       - name: install frontend dependencies
         run: npm install
 
@@ -38,3 +44,4 @@ jobs:
           releaseBody: "See CHANGELOG.md for details."
           releaseDraft: true
           prerelease: false
+

@@ -564,6 +564,115 @@ input:checked + .toggle-track::after {
 }
 .select-input option { background: #1a1a24; color: white; }
 
+/* ═══ Modern Select Dropdowns (Chrome 130+) ═══ */
+@supports (appearance: base-select) {
+  .select-input, .language-select {
+    appearance: base-select;
+  }
+  
+  select::select-fallback,
+  select::picker,
+  select::picker(select),
+  ::picker(select) {
+    background: #12121c !important; /* Solid robuster dunkler Hintergrund */
+    background-color: #12121c !important;
+    backdrop-filter: blur(35px) !important;
+    -webkit-backdrop-filter: blur(35px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    border-radius: var(--radius-sm) !important;
+    box-shadow: var(--shadow-lg) !important;
+    padding: 6px !important;
+    color: var(--text-primary) !important;
+    animation: dropdownFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+  }
+
+  /* Styling für optgroup-Labels (z.B. "Audio (Bitrate)") zur Kontrast-Behebung */
+  optgroup,
+  select optgroup,
+  .select-input optgroup,
+  .language-select optgroup,
+  select::select-fallback optgroup,
+  select::picker optgroup,
+  select::picker(select) optgroup,
+  ::picker(select) optgroup {
+    background: #12121c !important;
+    background-color: #12121c !important;
+    color: var(--accent) !important; /* Schöne Akzentfarbe (Lila) */
+    font-weight: 700 !important;
+    font-size: 11px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.8px !important;
+    padding: 8px 14px 4px !important;
+    display: block !important;
+    border: none !important;
+    outline: none !important;
+  }
+
+  /* Reset option defaults mit solidem dunklen Hintergrund */
+  select option,
+  select::select-fallback option,
+  select::picker option,
+  select::picker(select) option,
+  ::picker(select) option,
+  .select-input option,
+  .language-select option {
+    padding: 8px 14px;
+    border-radius: var(--radius-xs);
+    background: #12121c !important; /* Erzwingt dunkle Karten auf eventuell weißem Picker */
+    background-color: #12121c !important;
+    color: var(--text-primary) !important;
+    transition: all var(--transition);
+    cursor: pointer;
+    border: none !important;
+    outline: none !important;
+  }
+
+  /* Überschreiben der standardmäßigen grauen/weißen System-Selektionen */
+  select option:checked,
+  select::select-fallback option:checked,
+  select::picker option:checked,
+  select::picker(select) option:checked,
+  ::picker(select) option:checked,
+  .select-input option:checked, 
+  .language-select option:checked {
+    background-color: var(--accent) !important;
+    background: var(--accent) !important;
+    color: #ffffff !important;
+  }
+
+  /* Hover, Fokus und aktive Zustände überschreiben */
+  select option:hover,
+  select::select-fallback option:hover,
+  select::picker option:hover,
+  select::picker(select) option:hover,
+  ::picker(select) option:hover,
+  .select-input option:hover, 
+  .language-select option:hover,
+  select option:focus,
+  select::select-fallback option:focus,
+  select::picker option:focus,
+  select::picker(select) option:focus,
+  ::picker(select) option:focus,
+  .select-input option:focus,
+  .language-select option:focus,
+  select option:active,
+  select::select-fallback option:active,
+  select::picker option:active,
+  select::picker(select) option:active,
+  ::picker(select) option:active,
+  .select-input option:active,
+  .language-select option:active {
+    background-color: var(--accent-glow) !important;
+    background: var(--accent-glow) !important;
+    color: #ffffff !important;
+  }
+}
+
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
 /* ═══ Settings Row ═══ */
 .settings-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
 .setting-group { flex: 1; min-width: 180px; }
