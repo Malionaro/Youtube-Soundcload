@@ -1,9 +1,19 @@
 ----------------------------**V2.3.9**----------------------------
 
 **New Features:**
-- **Auto-Relaunch on Winget Installation:** The application now automatically relaunches itself after installing missing dependencies (FFmpeg or yt-dlp) via `winget` to instantly apply PATH changes.
-- **Premium Track-List Animations:** Overhauled track card entrance animations to smoothly slide up from the bottom with a subtle fade and blur, eliminating harsh side-sliding movements.
-- **Robust Settings Coordination:** Fixed race conditions in Discord Rich Presence toggling by ensuring configuration changes are written and persisted in the backend state before the presence status is updated.
+- **Playlist Search Mode:** Added a search type selector so the Search tab can now look for either individual tracks or YouTube playlists.
+- **Playlist Results to Sammelkorb:** Playlist search results can be sent directly to the Sammelkorb, where they are resolved into individual downloadable tracks.
+- **Smarter Sammelkorb Imports:** The Sammelkorb now recognizes playlist links from YouTube, Spotify, Apple Music, and SoundCloud Sets and expands them into separate queue items instead of showing the playlist as one entry.
+- **Discord Rich Presence Download Button:** Added a Rich Presence button that links users to the project's GitHub download page.
+
+**Bug Fixes & UX Improvements:**
+- **Cancel Button Recovery:** Fixed an issue where pressing `Abbrechen` could leave controls like folder selection, cookies selection, and folder opening unusable after cancellation.
+- **Robust Download State Handling:** Added a download run guard so old async download or analysis tasks cannot re-disable UI controls after a cancellation.
+- **Discord Rich Presence Reliability:** Improved Discord RPC reconnect handling, text sanitization, Activity validation, and visible logging for connection/update errors.
+- **Discord RPC Default State:** Discord Rich Presence is now enabled by default in both frontend and backend defaults.
+
+**Internal:**
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.9` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
 ----------------------------**V2.3.9**----------------------------
 
