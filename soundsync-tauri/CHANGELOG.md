@@ -14,7 +14,27 @@
 
 ---
 
-----------------------------**V2.3.12**----------------------------
+-------------------------**V2.3.12**----------------------------
+
+----------------------------**V2.3.11**----------------------------
+
+**New Features:**
+
+- **Localized Activity Log Messages:** Most SoundSync-generated log entries now use the active app language instead of hardcoded German or English text.
+- **Reusable Log Translation Helper:** Added a shared `logKey(...)` helper so new log messages can consistently use i18n keys and placeholder variables.
+
+**Bug Fixes & UX Improvements:**
+
+- **Language-Synced Queue Logs:** Queue actions like adding links, importing playlists, clearing the queue, and duplicate-link warnings now follow the selected language.
+- **Language-Synced Settings Logs:** Settings, theme, background, folder, cookies, TV mode, and auto-detection messages now follow the selected language.
+- **Language-Synced Update/System Logs:** Update checks, restart hints, system-check failures, copy errors, and config-save errors now use localized text.
+
+**Internal:**
+
+- **Translation Catalog Expansion:** Added the new log-message keys to the German and English translation files.
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.11` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
+
+-------------------------**V2.3.11**----------------------------
 
 ----------------------------**V2.3.10**----------------------------
 
