@@ -20,7 +20,7 @@ import de from "./i18n/de.json";
 import pl from "./i18n/pl.json";
 
 const translations: Record<string, Record<string, string>> = { en, de, pl };
-let currentLang = "de";
+let currentLang = "en";
 let t = translations[currentLang];
 
 function _(key: string, vars?: Record<string, string | number>): string {
@@ -49,6 +49,7 @@ interface AppConfig {
   auto_scroll_tracks?: boolean;
   eco_mode?: boolean;
   auto_tagging?: boolean;
+  after_download?: string;
 }
 
 interface PlaylistEntry {
@@ -79,7 +80,7 @@ interface DownloadProgress {
 let config: AppConfig = {
   download_folder: "",
   cookies_path: "",
-  language: "de",
+  language: "en",
   disable_changelog: false,
   auto_url_detection: true,
   discord_rpc: false,
@@ -87,6 +88,7 @@ let config: AppConfig = {
   auto_scroll_tracks: true,
   eco_mode: true,
   auto_tagging: true,
+  after_download: "nothing",
 };
 
 let isDownloading = false;
@@ -259,6 +261,9 @@ async function init() {
     await loadTranslations(savedLang);
     
     config = await invoke<AppConfig>("load_config");
+    if (config.after_download === undefined) config.after_download = "nothing";
+    const afterDownloadSelect = document.getElementById("after-download-select") as HTMLSelectElement | null;
+    if (afterDownloadSelect) afterDownloadSelect.value = config.after_download;
     if (config.download_folder) folderInput.value = config.download_folder;
     if (config.cookies_path) cookiesInput.value = config.cookies_path;
     if (config.auto_url_detection === undefined) config.auto_url_detection = true;
@@ -577,6 +582,8 @@ function setupEventListeners() {
     ($("eco-mode-toggle") as HTMLInputElement).checked = config.eco_mode !== false;
     ($("auto-tagging-toggle") as HTMLInputElement).checked = config.auto_tagging !== false;
     ($("accent-color-picker") as HTMLInputElement).value = config.accent_color || "#6c5ce7";
+    const afterDownloadSelect = document.getElementById("after-download-select") as HTMLSelectElement | null;
+    if (afterDownloadSelect) afterDownloadSelect.value = config.after_download || "nothing";
   });
 
   on("accent-color-picker", "input", (e) => {
@@ -623,7 +630,14 @@ function setupEventListeners() {
     config.auto_scroll_tracks = ($("auto-scroll-tracks-toggle") as HTMLInputElement).checked;
     config.eco_mode = ($("eco-mode-toggle") as HTMLInputElement).checked;
     config.auto_tagging = ($("auto-tagging-toggle") as HTMLInputElement).checked;
+    const afterDownloadSelect = document.getElementById("after-download-select") as HTMLSelectElement | null;
+    if (afterDownloadSelect) {
+      config.after_download = afterDownloadSelect.value;
+    }
     
+    // Save configuration first to prevent race condition with Discord Rich Presence
+    await saveConfigImmediate();
+
     // Apply Eco Mode immediately
     if (config.eco_mode) {
       if (!isWindowVisible || !document.hasFocus()) {
@@ -640,7 +654,6 @@ function setupEventListeners() {
       invoke("update_discord_presence", { details: "", stateMsg: "" });
     }
     
-    await saveConfigImmediate();
     ($("settings-modal") as HTMLElement).style.display = "none";
     log("⚙️ Einstellungen gespeichert", "success");
   });
@@ -913,9 +926,11 @@ function setupEventListeners() {
       const res = await invoke<string>("install_ffmpeg");
       log(`✅ ${res}`, "success");
       await checkSystem();
-      if (res.toLowerCase().includes("already installed") || res.toLowerCase().includes("bereits installiert")) {
-        log(_("install_log_restart_hint", { tool: "FFmpeg" }), "warning");
-      }
+      log("Restarting application to apply path changes...", "info");
+      setTimeout(async () => {
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      }, 1500);
     } catch (err) {
       status.textContent = _("install_failed");
       log(`❌ ${err}`, "error");
@@ -939,6 +954,11 @@ function setupEventListeners() {
       const res = await invoke<string>("install_ytdlp");
       log(`✅ ${res}`, "success");
       await checkSystem();
+      log("Restarting application to apply path changes...", "info");
+      setTimeout(async () => {
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      }, 1500);
     } catch (err) {
       status.textContent = _("install_failed");
       log(`❌ ${err}`, "error");
@@ -1648,6 +1668,10 @@ async function startDownload() {
       setStatus(_("download_complete"), "success");
       $("progress-label").textContent = _("download_complete");
       log(`🎉 ${_("download_complete")} ${completedTracks}/${totalTracks}`, "success");
+      if (config.after_download && config.after_download !== "nothing") {
+        log(`⚡ Executing action: ${config.after_download}`, "info");
+        await invoke("execute_after_download_action", { action: config.after_download });
+      }
     }
   } catch (e) {
     log(`❌ ${e}`, "error");

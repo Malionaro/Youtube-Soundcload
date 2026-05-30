@@ -40,6 +40,12 @@ pub struct AppConfig {
     pub eco_mode: bool,
     #[serde(default = "default_true")]
     pub auto_tagging: bool,
+    #[serde(default = "default_after_download")]
+    pub after_download: String,
+}
+
+pub fn default_after_download() -> String {
+    "nothing".to_string()
 }
 
 pub fn default_auto_url_detection() -> bool {
@@ -70,6 +76,7 @@ impl Default for AppConfig {
             auto_scroll_log: true,
             eco_mode: true,
             auto_tagging: true,
+            after_download: "nothing".to_string(),
         }
     }
 }

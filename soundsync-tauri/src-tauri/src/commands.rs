@@ -123,11 +123,11 @@ pub fn check_system() -> SystemCheckResult {
 fn check_pot_provider_files() -> (bool, String) {
     let appdata = match std::env::var("APPDATA") {
         Ok(value) => PathBuf::from(value),
-        Err(_) => return (false, "APPDATA nicht gefunden".to_string()),
+        Err(_) => return (false, "APPDATA not found".to_string()),
     };
     let home = match std::env::var("USERPROFILE") {
         Ok(value) => PathBuf::from(value),
-        Err(_) => return (false, "USERPROFILE nicht gefunden".to_string()),
+        Err(_) => return (false, "USERPROFILE not found".to_string()),
     };
 
     let plugin_zip = appdata
@@ -144,24 +144,24 @@ fn check_pot_provider_files() -> (bool, String) {
         (
             true,
             format!(
-                "Aktiv: Plugin installiert, Provider-Script gebaut, Node {}",
+                "Active: Plugin installed, provider script built, Node {}",
                 node_version
             ),
         )
     } else {
         let mut missing = Vec::new();
         if !plugin_zip.exists() {
-            missing.push("Plugin-ZIP");
+            missing.push("Plugin ZIP");
         }
         if !provider_script.exists() {
-            missing.push("Provider-Script");
+            missing.push("Provider Script");
         }
         if !node_available {
             missing.push("Node.js");
         }
         (
             false,
-            format!("Nicht eingerichtet: {} fehlt", missing.join(", ")),
+            format!("Not set up: {} missing", missing.join(", ")),
         )
     }
 }
@@ -170,7 +170,7 @@ fn check_pot_provider_files() -> (bool, String) {
 fn check_pot_provider_files() -> (bool, String) {
     (
         false,
-        "Auto-Setup für PO-Token-Provider ist derzeit nur unter Windows eingebaut".to_string(),
+        "Auto-setup for PO-Token Provider is currently only supported on Windows".to_string(),
     )
 }
 
@@ -1093,6 +1093,7 @@ pub fn open_folder(path: String) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
+
         Command::new("open")
             .arg(&path)
             .spawn()
@@ -1180,10 +1181,35 @@ pub async fn import_playlist_tracks(url: String) -> Result<PlaylistInfo, String>
         if url.contains("/playlist/") || url.contains("/album/") {
             return resolve_spotify_playlist(&url).await;
         } else {
-            return Err("Bitte gib einen Link zu einer Spotify Playlist oder einem Album ein.".to_string());
+            return Err("Please enter a link to a Spotify playlist or album.".to_string());
         }
     } else if url.contains("music.apple.com") {
         return resolve_apple_music_playlist(&url).await;
     }
-    Err("Nicht unterstützte URL. Bitte gib eine Spotify oder Apple Music Playlist ein.".to_string())
+    Err("Unsupported URL. Please enter a Spotify or Apple Music playlist.".to_string())
+}
+
+#[tauri::command]
+pub fn execute_after_download_action(action: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        match action.as_str() {
+            "shutdown" => {
+                Command::new("shutdown")
+                    .args(["/s", "/t", "30"])
+                    .creation_flags(0x08000000)
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            }
+            "lock" => {
+                Command::new("rundll32.exe")
+                    .args(["user32.dll,LockWorkStation"])
+                    .creation_flags(0x08000000)
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }

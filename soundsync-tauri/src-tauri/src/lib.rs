@@ -124,7 +124,8 @@ pub fn run() {
             download_and_install_update,
             search_videos,
             get_trending_videos,
-            import_playlist_tracks
+            import_playlist_tracks,
+            execute_after_download_action
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

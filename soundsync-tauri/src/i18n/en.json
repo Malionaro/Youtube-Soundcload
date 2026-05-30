@@ -140,7 +140,7 @@
   "ytdlp_pot_title": "PO-Token-Provider Plugins",
   "ytdlp_pot_desc": "There are plugins for yt-dlp (such as bgutil-ytdlp-pot-provider) that automatically generate valid PO-Tokens in the background. These can be integrated into yt-dlp if needed.",
   "tab_queue": "Clipboard Queue",
-  "queue_title": "📥 Clipboard Queue / Warteschlange",
+  "queue_title": "📥 Clipboard Queue",
   "queue_desc": "Links copied in the background or sent from the extension will be collected here.",
   "queue_download_all": "Download All",
   "queue_clear_all": "Clear Queue",
@@ -148,5 +148,15 @@
   "add_to_queue": "Add to Queue",
   "queue_manual_add": "➕ Add",
   "queue_import_playlist": "📥 Import Playlist",
-  "queue_loading_playlist": "⌛ Loading Playlist..."
+  "queue_loading_playlist": "⌛ Loading Playlist...",
+  "after_download_label": "Action after download completes",
+  "after_download_desc": "Choose what to do when all downloads are finished.",
+  "after_download_nothing": "Do nothing",
+  "after_download_shutdown": "Shutdown PC",
+  "after_download_lock": "Lock PC",
+  "queue_manual_input_placeholder": "Put link into queue manually...",
+  "bg_browse_btn_text": "Select",
+  "install_transparency_title_html": "What happens during installation?",
+  "install_transparency_desc_html": "SoundSync starts Windows Package Manager (winget), accepts the package agreements, and installs the selected tool into your user/system PATH. Depending on your Windows setup, an installer or UAC prompt may appear briefly. SoundSync checks the installation again afterwards.",
+  "winget_check_updates_status": "Checking for updates..."
 }

@@ -148,5 +148,15 @@
   "add_to_queue": "In Korb legen",
   "queue_manual_add": "➕ Hinzufügen",
   "queue_import_playlist": "📥 Playlist importieren",
-  "queue_loading_playlist": "⌛ Lade Playlist..."
+  "queue_loading_playlist": "⌛ Lade Playlist...",
+  "after_download_label": "Aktion nach Abschluss des Downloads",
+  "after_download_desc": "Wähle aus, was nach Abschluss aller Downloads geschehen soll.",
+  "after_download_nothing": "Nichts tun",
+  "after_download_shutdown": "PC herunterfahren",
+  "after_download_lock": "PC sperren",
+  "queue_manual_input_placeholder": "Link manuell in Korb legen...",
+  "bg_browse_btn_text": "Wählen",
+  "install_transparency_title_html": "Was passiert beim Installieren?",
+  "install_transparency_desc_html": "SoundSync startet Windows Package Manager (winget), akzeptiert die Paketbedingungen und installiert das gewählte Tool in deinen Benutzer-/System-Pfad. Je nach Windows-Konfiguration kann kurz ein Installer oder eine UAC-Abfrage erscheinen. Danach prüft SoundSync die Installation erneut.",
+  "winget_check_updates_status": "Prüfe..."
 }
