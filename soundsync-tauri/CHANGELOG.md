@@ -1,3 +1,23 @@
+----------------------------**V2.3.13**----------------------------
+
+**New Features:**
+- **Multi-Link Clipboard Detection:** Auto-URL detection now finds multiple supported links in the clipboard and can add all detected links to the queue at once.
+- **Clickable Notifications:** Clicking a SoundSync desktop notification now restores, shows, and focuses the app window.
+- **Remote Language Sync:** SoundSync Remote now follows the main app language and supports German, English, and Polish text in its mobile UI.
+
+**Bug Fixes & UX Improvements:**
+- **Notification Translation Fix:** Fixed Windows notifications showing raw translation keys instead of readable text.
+- **Remote Player Layout Fix:** Improved the Remote player controls so volume and playback buttons no longer overlap on narrow screens.
+- **Better Download Error Details:** Download and conversion failures now show a readable cause, a suggested fix, and the relevant raw details in the activity log.
+
+**Internal:**
+- **Remote Config Endpoint:** Added a `/remote-config` endpoint so the Remote UI can read the active language from the app config.
+- **yt-dlp Error Detail Capture:** Download failures now include the last stderr lines from `yt-dlp` instead of only returning an exit code.
+- **Translation Catalog Expansion:** Added new German, English, and Polish strings for notifications, Remote UI, and download error diagnosis.
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.13` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
+
+---
+
 ----------------------------**V2.3.12**----------------------------
 
 **New Features:**
@@ -14,7 +34,7 @@
 
 ---
 
--------------------------**V2.3.12**----------------------------
+-------------------**V2.3.12**----------------------------
 
 ----------------------------**V2.3.11**----------------------------
 

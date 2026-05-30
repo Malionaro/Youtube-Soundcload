@@ -547,6 +547,7 @@ pub async fn download_track(
 
         let mut downloaded_paths: Vec<String> = Vec::new();
         let mut already_downloaded = false;
+        let mut stderr_tail: Vec<String> = Vec::new();
 
         if let Some(stdout) = child.stdout.take() {
             let reader = std::io::BufReader::new(stdout);
@@ -695,6 +696,12 @@ pub async fn download_track(
                 if let Ok(line) = line {
                     let trimmed = line.trim();
                     let _ = app_handle.emit("download-log", trimmed.to_string());
+                    if !trimmed.is_empty() {
+                        stderr_tail.push(trimmed.to_string());
+                        if stderr_tail.len() > 8 {
+                            stderr_tail.remove(0);
+                        }
+                    }
                 }
             }
         }
@@ -720,10 +727,18 @@ pub async fn download_track(
         }
         match status {
             Ok(s) if s.success() => Ok("Success".to_string()),
-            Ok(s) => Err(format!(
-                "yt-dlp exited with code: {}",
-                s.code().unwrap_or(-1)
-            )),
+            Ok(s) => {
+                let detail = if stderr_tail.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n{}", stderr_tail.join("\n"))
+                };
+                Err(format!(
+                    "yt-dlp exited with code: {}{}",
+                    s.code().unwrap_or(-1),
+                    detail
+                ))
+            }
             Err(e) => Err(e.to_string()),
         }
     })

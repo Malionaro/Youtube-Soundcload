@@ -73,6 +73,30 @@ pub fn ss_start_remote_server(app: AppHandle) -> Result<(), String> {
                         );
                     let _ = request.respond(response);
                 }
+                (&Method::Get, "/remote-config") => {
+                    let language = {
+                        let state = server_handle.state::<AppState>();
+                        let config = state.config.lock().unwrap();
+                        config.language.clone()
+                    };
+                    let json = serde_json::json!({ "language": language }).to_string();
+                    let response = Response::from_string(json)
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Content-Type"[..],
+                                &b"application/json"[..],
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                &b"Access-Control-Allow-Origin"[..],
+                                &b"*"[..],
+                            )
+                            .unwrap(),
+                        );
+                    let _ = request.respond(response);
+                }
                 (&Method::Post, "/send") => {
                     let mut content = String::new();
                     let _ = request.as_reader().read_to_string(&mut content);

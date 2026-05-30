@@ -2,8 +2,9 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { open, confirm } from "@tauri-apps/plugin-dialog";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { openUrl, openPath } from "@tauri-apps/plugin-opener";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 function debounce<T extends (...args: any[]) => any>(fn: T, ms: number): (...args: Parameters<T>) => void {
@@ -31,6 +32,51 @@ function _(key: string, vars?: Record<string, string | number>): string {
     }
   }
   return text;
+}
+
+function translatedOrFallback(key: string, fallback: string, vars?: Record<string, string | number>): string {
+  const text = _(key, vars);
+  return text === key ? fallback : text;
+}
+
+function diagnoseDownloadError(error: unknown) {
+  const raw = String(error || "").trim();
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("failed to start yt-dlp") || lower.includes("yt-dlp not found") || lower.includes("program not found")) {
+    return { titleKey: "error_title_ytdlp_missing", helpKey: "error_help_ytdlp_missing", raw };
+  }
+  if (lower.includes("ffmpeg") && (lower.includes("not found") || lower.includes("no such file") || lower.includes("cannot find"))) {
+    return { titleKey: "error_title_ffmpeg_missing", helpKey: "error_help_ffmpeg_missing", raw };
+  }
+  if (lower.includes("cookies") || lower.includes("sign in") || lower.includes("login") || lower.includes("private video") || lower.includes("confirm your age")) {
+    return { titleKey: "error_title_cookies", helpKey: "error_help_cookies", raw };
+  }
+  if (lower.includes("unsupported url") || lower.includes("no suitable extractor") || lower.includes("invalid url")) {
+    return { titleKey: "error_title_invalid_url", helpKey: "error_help_invalid_url", raw };
+  }
+  if (lower.includes("403") || lower.includes("forbidden") || lower.includes("unavailable") || lower.includes("copyright") || lower.includes("removed")) {
+    return { titleKey: "error_title_unavailable", helpKey: "error_help_unavailable", raw };
+  }
+  if (lower.includes("timed out") || lower.includes("temporary failure") || lower.includes("connection") || lower.includes("network") || lower.includes("dns")) {
+    return { titleKey: "error_title_network", helpKey: "error_help_network", raw };
+  }
+  if (lower.includes("permission denied") || lower.includes("access is denied") || lower.includes("zugriff verweigert")) {
+    return { titleKey: "error_title_folder_permission", helpKey: "error_help_folder_permission", raw };
+  }
+
+  return { titleKey: "error_title_unknown", helpKey: "error_help_unknown", raw };
+}
+
+function logErrorDetails(error: unknown, context?: string) {
+  const diagnosis = diagnoseDownloadError(error);
+  const prefix = context ? `${context}: ` : "";
+  log(`❌ ${prefix}${_(diagnosis.titleKey)}`, "error");
+  log(`💡 ${_(diagnosis.helpKey)}`, "warning");
+  if (diagnosis.raw) {
+    const compactRaw = diagnosis.raw.split("\n").slice(-6).join(" | ");
+    log(`Details: ${compactRaw}`, "info");
+  }
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -101,6 +147,7 @@ let playlistEntries: PlaylistEntry[] = [];
 let clipboardWatchTimer: number | null = null;
 let lastDetectedUrl = "";
 let pendingDetectedUrl = "";
+let pendingDetectedUrls: string[] = [];
 let appVersion = "0.0.0";
 let selectedConversionFiles: string[] = [];
 let logScrollPending = false;
@@ -109,6 +156,7 @@ let isWindowVisible = true;
 let ecoModeActive = false;
 let isTvMode = false;
 let currentTranslations: Record<string, string> = {};
+let notificationActionListenerReady = false;
 
 let isBatchQueueMode = false;
 interface QueueItem {
@@ -306,6 +354,7 @@ async function init() {
     log("⚠️ Config could not be loaded, using defaults", "warning");
   }
   updateUI();
+  setupNotificationClickHandler();
   setupEventListeners();
   setupTauriListeners();
   setupTabs();
@@ -711,10 +760,7 @@ function setupEventListeners() {
 
   on("detected-url-use", "click", useDetectedUrl);
   on("detected-url-add", "click", () => {
-    if (pendingDetectedUrl) {
-      void addToQueue(pendingDetectedUrl, "clipboard");
-      hideDetectedUrlPrompt();
-    }
+    void addDetectedUrlsToQueue();
   });
   on("detected-url-dismiss", "click", hideDetectedUrlPrompt);
 
@@ -1166,7 +1212,7 @@ function setupTauriListeners() {
     totalProgress.classList.remove("active");
     convertProgress.classList.remove("active");
     setStatus(_("error_occurred"), "error");
-    log(`❌ ${event.payload}`, "error");
+    logErrorDetails(event.payload);
     updateDiscordPresence("Error occurred", event.payload);
   });
 
@@ -1191,7 +1237,7 @@ function setupTauriListeners() {
     $("convert-status-text").textContent = _("conversion_failed");
     $("convert-status-text").className = "status-text error";
     $("modal-progress-container").style.display = "none";
-    log(`❌ Conversion: ${event.payload}`, "error");
+    logErrorDetails(event.payload, "Conversion");
   });
 
   listen<{ url: string; format?: string; autoStart?: boolean }>("remote-url-received", (event) => {
@@ -1257,51 +1303,103 @@ async function checkClipboardForMediaUrl() {
 
   try {
     const text = await invoke<string>("read_clipboard_text");
-    const url = extractMediaUrl(text);
-    if (!url || url === lastDetectedUrl || url === urlInput.value.trim()) return;
+    const urls = extractMediaUrls(text).filter(url => url !== urlInput.value.trim());
+    if (urls.length === 0) return;
 
-    lastDetectedUrl = url;
-    pendingDetectedUrl = url;
-    showDetectedUrlPrompt(url);
-    await notifyDetectedUrl(url);
+    const detectionSignature = urls.join("\n");
+    if (detectionSignature === lastDetectedUrl) return;
+
+    lastDetectedUrl = detectionSignature;
+    pendingDetectedUrls = urls;
+    pendingDetectedUrl = urls[0];
+    showDetectedUrlPrompt(urls);
+    await notifyDetectedUrl(urls);
   } catch {
     // Clipboard can be temporarily locked by another app; ignore and try again.
   }
 }
 
-function extractMediaUrl(text: string): string | null {
-  const match = text.match(/https?:\/\/[^\s"'<>]+/i);
-  if (!match) return null;
+async function openAppWindowFromNotification() {
+  try {
+    const appWindow = getCurrentWindow();
+    await appWindow.show();
+    await appWindow.unminimize();
+    await appWindow.setFocus();
+  } catch (e) {
+    console.warn("Could not focus app window from notification:", e);
+  }
+}
 
-  const url = match[0].replace(/[),.;]+$/, "");
+async function setupNotificationClickHandler() {
+  if (notificationActionListenerReady) return;
+  notificationActionListenerReady = true;
+
+  try {
+    await onAction(() => {
+      void openAppWindowFromNotification();
+    });
+  } catch (e) {
+    notificationActionListenerReady = false;
+    console.warn("Could not register notification click handler:", e);
+  }
+}
+
+function extractMediaUrl(text: string): string | null {
+  return extractMediaUrls(text)[0] || null;
+}
+
+function extractMediaUrls(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s"'<>]+/gi);
+  if (!matches) return [];
+
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const rawUrl of matches) {
+    const url = rawUrl.replace(/[),.;]+$/, "");
+    if (seen.has(url)) continue;
+
+    if (isSupportedMediaUrl(url)) {
+      seen.add(url);
+      urls.push(url);
+    }
+  }
+
+  return urls;
+}
+
+function isSupportedMediaUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
-    if (
+    return (
       host === "youtu.be" ||
       host.endsWith("youtube.com") ||
       host.endsWith("music.youtube.com") ||
       host.endsWith("soundcloud.com") ||
       host.endsWith("spotify.com")
-    ) {
-      return url;
-    }
+    );
   } catch {
-    return null;
+    return false;
   }
-
-  return null;
 }
 
 // fetchSpotifyMetadata removed – was unused dead code
 
-function showDetectedUrlPrompt(url: string) {
-  $("detected-url-text").textContent = url;
+function showDetectedUrlPrompt(urls: string[]) {
+  const prompt = $("detected-url-prompt-text");
+  prompt.textContent = urls.length > 1
+    ? _("use_urls_prompt").replace("{count}", String(urls.length))
+    : _("use_url_prompt");
+
+  $("detected-url-text").textContent = urls.length > 1
+    ? `${urls[0]} +${urls.length - 1}`
+    : urls[0];
   $("detected-url-banner").style.display = "flex";
 }
 
 function hideDetectedUrlPrompt() {
   pendingDetectedUrl = "";
+  pendingDetectedUrls = [];
   $("detected-url-banner").style.display = "none";
 }
 
@@ -1313,7 +1411,19 @@ function useDetectedUrl() {
   hideDetectedUrlPrompt();
 }
 
-async function notifyDetectedUrl(url: string) {
+async function addDetectedUrlsToQueue() {
+  const urls = pendingDetectedUrls.length > 0 ? pendingDetectedUrls : [pendingDetectedUrl].filter(Boolean);
+  if (urls.length === 0) return;
+
+  for (const url of urls) {
+    await addToQueue(url, "clipboard");
+  }
+
+  logKey("log_clipboard_urls_queued", "success", { count: String(urls.length) });
+  hideDetectedUrlPrompt();
+}
+
+async function notifyDetectedUrl(urls: string[]) {
   try {
     let permissionGranted = await isPermissionGranted();
     if (!permissionGranted) {
@@ -1321,8 +1431,18 @@ async function notifyDetectedUrl(url: string) {
     }
     if (permissionGranted) {
       sendNotification({
-        title: "SoundSync URL erkannt",
-        body: `YouTube/SoundCloud-Link gefunden. In der App übernehmen? ${url}`,
+        title: translatedOrFallback("notification_url_detected_title", "SoundSync URL erkannt"),
+        body: urls.length > 1
+          ? translatedOrFallback(
+              "notification_urls_detected_body",
+              `${urls.length} YouTube/SoundCloud-Links gefunden. In SoundSync sammeln?`,
+              { count: String(urls.length) },
+            )
+          : translatedOrFallback(
+              "notification_url_detected_body",
+              `YouTube/SoundCloud-Link gefunden. In der App übernehmen? ${urls[0]}`,
+              { url: urls[0] },
+            ),
       });
     }
   } catch {
@@ -1680,7 +1800,7 @@ async function startDownload() {
           }
         } catch (e) {
           if (!isDownloading) return;
-          log(`❌ ${entry.title}: ${e}`, "error");
+          logErrorDetails(e, entry.title);
           if (card) {
             const bar = card.querySelector(".track-progress-bar") as HTMLElement;
             const stat = card.querySelector(".track-stat") as HTMLElement;
@@ -1724,7 +1844,7 @@ async function startDownload() {
     }
   } catch (e) {
     if (runId !== downloadRunId) return;
-    log(`❌ ${e}`, "error");
+    logErrorDetails(e);
     setStatus(_("error_occurred"), "error");
     setDownloadUiState(false);
   }
