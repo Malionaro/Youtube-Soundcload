@@ -8,6 +8,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+const DISCORD_CLIENT_ID: &str = "1510224184335405118";
+
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
@@ -53,12 +55,13 @@ pub async fn update_discord_presence(
     details: String,
     state_msg: String,
 ) -> Result<(), String> {
-    use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
+    use discord_rich_presence::DiscordIpc;
 
     let discord_rpc_enabled = { state.config.lock().unwrap().discord_rpc };
+    let details = sanitize_discord_text(&details, "SoundSync Downloader");
+    let state_msg = sanitize_discord_text(&state_msg, "Idle");
 
-    if !discord_rpc_enabled {
-        // If disabled, ensure client is closed
+    if !discord_rpc_enabled || details.is_empty() || state_msg.is_empty() {
         let mut client_lock = state.discord_client.lock().unwrap();
         if let Some(mut client) = client_lock.take() {
             let _ = client.client.close();
@@ -68,39 +71,104 @@ pub async fn update_discord_presence(
 
     let mut client_lock = state.discord_client.lock().unwrap();
 
-    // Initialize if needed
     if client_lock.is_none() {
-        // DiscordIpcClient::new returns the client directly, not a Result
-        let mut client = DiscordIpcClient::new("1334907994863079434");
-        if let Err(e) = client.connect() {
-            return Err(e.to_string());
-        }
-
-        let start_time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
-        *client_lock = Some(DiscordClient { client, start_time });
+        *client_lock = Some(connect_discord_client()?);
     }
 
     if let Some(discord) = client_lock.as_mut() {
         use discord_rich_presence::activity;
 
         let assets = activity::Assets::new().large_image("logo");
+        let buttons = vec![activity::Button::new(
+            "Download",
+            "https://github.com/Malionaro/Johann-Youtube-Soundcload",
+        )];
         let activity = activity::Activity::new()
             .details(&details)
             .state(&state_msg)
             .assets(assets)
+            .buttons(buttons)
             .timestamps(activity::Timestamps::new().start(discord.start_time));
 
         if let Err(e) = discord.client.set_activity(activity) {
-            *client_lock = None; // Reset the client on error so it can reconnect next time
-            return Err(e.to_string());
+            let first_error = e.to_string();
+            *client_lock = Some(connect_discord_client()?);
+
+            if let Some(discord) = client_lock.as_mut() {
+                let assets = activity::Assets::new().large_image("logo");
+                let buttons = vec![activity::Button::new(
+                    "Download",
+                    "https://github.com/Malionaro/Johann-Youtube-Soundcload",
+                )];
+                let activity = activity::Activity::new()
+                    .details(&details)
+                    .state(&state_msg)
+                    .assets(assets)
+                    .buttons(buttons)
+                    .timestamps(activity::Timestamps::new().start(discord.start_time));
+
+                if let Err(e) = discord.client.set_activity(activity) {
+                    *client_lock = None;
+                    return Err(format!("{}; reconnect failed: {}", first_error, e));
+                }
+            }
         }
     }
 
     Ok(())
+}
+
+fn connect_discord_client() -> Result<DiscordClient, String> {
+    use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
+
+    validate_discord_application_id()?;
+
+    let mut client = DiscordIpcClient::new(DISCORD_CLIENT_ID);
+    client.connect().map_err(|e| e.to_string())?;
+
+    let start_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    Ok(DiscordClient { client, start_time })
+}
+
+fn validate_discord_application_id() -> Result<(), String> {
+    let url = format!(
+        "https://discord.com/api/v10/oauth2/applications/{}/rpc",
+        DISCORD_CLIENT_ID
+    );
+
+    let result = ureq::get(&url)
+        .timeout(std::time::Duration::from_secs(3))
+        .call();
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(ureq::Error::Status(404, response)) => {
+            let body = response.into_string().unwrap_or_default();
+            if body.contains("Unknown Application") {
+                Err(format!(
+                    "Discord App-ID {} ist unbekannt. Rich Presence braucht eine gültige Discord Developer Application Client ID.",
+                    DISCORD_CLIENT_ID
+                ))
+            } else {
+                Err(format!("Discord App-ID {} wurde nicht gefunden.", DISCORD_CLIENT_ID))
+            }
+        }
+        Err(ureq::Error::Status(status, _)) => Err(format!(
+            "Discord App-ID {} konnte nicht geprüft werden (HTTP {}).",
+            DISCORD_CLIENT_ID, status
+        )),
+        Err(_) => Ok(()),
+    }
+}
+
+fn sanitize_discord_text(value: &str, fallback: &str) -> String {
+    let trimmed = value.trim();
+    let source = if trimmed.is_empty() { fallback } else { trimmed };
+    source.chars().take(128).collect()
 }
 
 #[tauri::command]
@@ -292,6 +360,15 @@ pub async fn get_playlist_info(
 #[tauri::command]
 pub async fn search_videos(query: String) -> Result<PlaylistInfo, String> {
     let resolved_url = format!("ytsearch20:{}", query);
+    get_playlist_info(resolved_url, None).await
+}
+
+#[tauri::command]
+pub async fn search_playlists(query: String) -> Result<PlaylistInfo, String> {
+    let resolved_url = format!(
+        "https://www.youtube.com/results?search_query={}&sp=EgIQAw%253D%253D",
+        urlencoding::encode(&query)
+    );
     get_playlist_info(resolved_url, None).await
 }
 

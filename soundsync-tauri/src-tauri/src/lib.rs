@@ -123,6 +123,7 @@ pub fn run() {
             ss_start_remote_server,
             download_and_install_update,
             search_videos,
+            search_playlists,
             get_trending_videos,
             import_playlist_tracks,
             execute_after_download_action

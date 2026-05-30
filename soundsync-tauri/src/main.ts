@@ -83,7 +83,7 @@ let config: AppConfig = {
   language: "en",
   disable_changelog: false,
   auto_url_detection: true,
-  discord_rpc: false,
+  discord_rpc: true,
   auto_scroll_log: true,
   auto_scroll_tracks: true,
   eco_mode: true,
@@ -94,6 +94,8 @@ let config: AppConfig = {
 let isDownloading = false;
 let totalTracks = 0;
 let completedTracks = 0;
+let discordRpcLogged = false;
+let downloadRunId = 0;
 let startTime = 0;
 let playlistEntries: PlaylistEntry[] = [];
 let clipboardWatchTimer: number | null = null;
@@ -316,15 +318,19 @@ async function init() {
 // ─── Search & Trending ───────────────────────────────────────────────────────
 async function performSearch() {
   const input = getEl<HTMLInputElement>("search-input");
+  const typeSelect = getEl<HTMLSelectElement>("search-type-select");
   const query = input.value.trim();
   if (!query) return;
 
   const resultsGrid = $("search-results");
-  resultsGrid.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Suche nach "${query}"...</span></div>`;
+  const searchType = typeSelect?.value === "playlists" ? "playlists" : "videos";
+  const label = searchType === "playlists" ? "Playlists" : "Tracks";
+  resultsGrid.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Suche ${label} nach "${query}"...</span></div>`;
 
   try {
-    const info = await invoke<PlaylistInfo>("search_videos", { query });
-    renderResults(info.entries, resultsGrid);
+    const command = searchType === "playlists" ? "search_playlists" : "search_videos";
+    const info = await invoke<PlaylistInfo>(command, { query });
+    renderResults(info.entries, resultsGrid, searchType);
   } catch (e) {
     resultsGrid.innerHTML = `<div class="empty-state"><p class="status-text error">Fehler bei der Suche: ${e}</p></div>`;
   }
@@ -336,7 +342,7 @@ async function loadTrending() {
 
   try {
     const info = await invoke<PlaylistInfo>("get_trending_videos");
-    renderResults(info.entries, resultsGrid);
+    renderResults(info.entries, resultsGrid, "videos");
   } catch (e) {
     resultsGrid.innerHTML = `<div class="empty-state">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.5" opacity="0.8">
@@ -347,7 +353,7 @@ async function loadTrending() {
   }
 }
 
-function renderResults(entries: PlaylistEntry[], container: HTMLElement) {
+function renderResults(entries: PlaylistEntry[], container: HTMLElement, resultType: "videos" | "playlists" = "videos") {
   if (!entries || entries.length === 0) {
     container.innerHTML = `<div class="empty-state"><p>Keine Ergebnisse gefunden.</p></div>`;
     return;
@@ -360,28 +366,34 @@ function renderResults(entries: PlaylistEntry[], container: HTMLElement) {
     card.style.animationDelay = `${idx * 0.05}s`;
 
     const durationStr = entry.duration ? formatDuration(entry.duration) : "";
+    const isPlaylist = resultType === "playlists";
     
     card.innerHTML = `
       <div class="result-thumb-container">
         <img src="${entry.thumbnail || '/src/assets/logo.png'}" class="result-thumb" loading="lazy" />
         ${durationStr ? `<span class="result-duration">${durationStr}</span>` : ""}
+        ${isPlaylist ? `<span class="result-duration">Playlist</span>` : ""}
       </div>
       <div class="result-info">
         <h3 class="result-title" title="${entry.title}">${entry.title}</h3>
-        <span class="result-channel">YouTube</span>
+        <span class="result-channel">${isPlaylist ? "YouTube Playlist" : "YouTube"}</span>
       </div>
       <div class="result-actions">
         <button class="btn btn-small btn-primary btn-full download-result-btn" data-url="${entry.url}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download
+          ${isPlaylist ? "In Korb" : "Download"}
         </button>
       </div>
     `;
 
-    card.querySelector(".download-result-btn")?.addEventListener("click", (e) => {
+    card.querySelector(".download-result-btn")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       const url = (e.currentTarget as HTMLElement).getAttribute("data-url");
       if (url) {
+        if (isPlaylist) {
+          await importPlaylist(url, "manual");
+          return;
+        }
         urlInput.value = url;
         updateDownloadBtnState();
         // Switch to downloader tab
@@ -405,8 +417,12 @@ function formatDuration(seconds: number): string {
 async function updateDiscordPresence(details: string, state_msg: string) {
   try {
     await invoke("update_discord_presence", { details, stateMsg: state_msg });
+    if (config.discord_rpc && !discordRpcLogged) {
+      discordRpcLogged = true;
+      log("Discord RPC aktualisiert", "info");
+    }
   } catch (e) {
-    // Ignore RPC errors (e.g. Discord not running)
+    log(`ℹ️ Discord RPC: ${e}`, "info");
   }
 }
 
@@ -678,7 +694,7 @@ function setupEventListeners() {
   on("detected-url-use", "click", useDetectedUrl);
   on("detected-url-add", "click", () => {
     if (pendingDetectedUrl) {
-      addToQueue(pendingDetectedUrl, "clipboard");
+      void addToQueue(pendingDetectedUrl, "clipboard");
       hideDetectedUrlPrompt();
     }
   });
@@ -686,28 +702,28 @@ function setupEventListeners() {
 
   on("queue-manual-input", "input", checkPlaylistUrlInput);
 
-  on("queue-manual-add-btn", "click", () => {
+  on("queue-manual-add-btn", "click", async () => {
     const url = queueManualInput.value.trim();
     if (url) {
       const isPlaylist = queueManualAddBtn.classList.contains("btn-import-active");
       if (isPlaylist) {
-        importPlaylist(url);
+        await importPlaylist(url);
       } else {
-        addToQueue(url, "manual");
+        await addToQueue(url, "manual");
         queueManualInput.value = "";
       }
     }
   });
 
-  on("queue-manual-input", "keypress", (e: KeyboardEvent) => {
+  on("queue-manual-input", "keypress", async (e: KeyboardEvent) => {
     if (e.key === "Enter") {
       const url = queueManualInput.value.trim();
       if (url) {
         const isPlaylist = queueManualAddBtn.classList.contains("btn-import-active");
         if (isPlaylist) {
-          importPlaylist(url);
+          await importPlaylist(url);
         } else {
-          addToQueue(url, "manual");
+          await addToQueue(url, "manual");
           queueManualInput.value = "";
         }
       }
@@ -1115,11 +1131,7 @@ function setupTauriListeners() {
   });
 
   listen<string>("download-finished", () => {
-    isDownloading = false;
-    downloadBtn.disabled = false;
-    cancelBtn.disabled = true;
-    formatSelect.disabled = false;
-    (getEl("convert-btn") as HTMLButtonElement).disabled = false;
+    setDownloadUiState(false);
 
     downloadProgress.classList.remove("active");
     totalProgress.classList.remove("active");
@@ -1138,10 +1150,7 @@ function setupTauriListeners() {
   });
 
   listen<string>("download-error", (event) => {
-    isDownloading = false;
-    downloadBtn.disabled = false;
-    cancelBtn.disabled = true;
-    formatSelect.disabled = false;
+    setDownloadUiState(false);
     downloadProgress.classList.remove("active");
     totalProgress.classList.remove("active");
     convertProgress.classList.remove("active");
@@ -1199,7 +1208,7 @@ function setupTauriListeners() {
         log(`⚠️ Auto-Start abgebrochen: Ordner fehlt oder Download läuft bereits.`, "warning");
       }
     } else {
-      addToQueue(p.url, "extension");
+      void addToQueue(p.url, "extension");
       log(`🔌 Link von Browser-Extension erhalten und in Sammelkorb gelegt`, "success");
       
       // Native notification that it was added
@@ -1311,10 +1320,31 @@ async function notifyDetectedUrl(url: string) {
 }
 
 // ─── Clipboard Queue (Sammelkorb) Logic ──────────────────────────────────────
-function addToQueue(url: string, source: "clipboard" | "extension" | "manual", title?: string) {
+function isPlaylistQueueUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    return (
+      parsed.searchParams.has("list") ||
+      (host.includes("spotify.com") && (path.includes("/playlist/") || path.includes("/album/"))) ||
+      (host.includes("music.apple.com") && (path.includes("/playlist/") || path.includes("/album/"))) ||
+      (host.includes("soundcloud.com") && path.includes("/sets/"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function addToQueue(url: string, source: "clipboard" | "extension" | "manual", title?: string) {
   // Simple validation to ensure it looks like a URL
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     log(`⚠️ Ungültiger Link: ${url}`, "warning");
+    return;
+  }
+
+  if (isPlaylistQueueUrl(url) && !title) {
+    await importPlaylist(url, source);
     return;
   }
 
@@ -1488,8 +1518,7 @@ function checkPlaylistUrlInput() {
   const textSpan = document.getElementById("queue-manual-add-btn-text");
   if (!textSpan) return;
 
-  const isPlaylist = (url.includes("spotify.com") && (url.includes("/playlist/") || url.includes("/album/"))) ||
-                     (url.includes("music.apple.com") && (url.includes("/playlist/") || url.includes("/album/")));
+  const isPlaylist = isPlaylistQueueUrl(url);
 
   if (isPlaylist) {
     queueManualAddBtn.classList.add("btn-import-active");
@@ -1500,37 +1529,45 @@ function checkPlaylistUrlInput() {
   }
 }
 
-async function importPlaylist(url: string) {
+async function importPlaylist(url: string, source: "clipboard" | "extension" | "manual" = "manual") {
   const textSpan = document.getElementById("queue-manual-add-btn-text");
   if (!textSpan) return;
+  const isManualImport = source === "manual" && queueManualInput.value.trim() === url;
 
   try {
-    queueManualInput.disabled = true;
-    queueManualAddBtn.disabled = true;
-    textSpan.innerHTML = `<span class="btn-spinner"></span>${_("queue_loading_playlist")}`;
+    if (isManualImport) {
+      queueManualInput.disabled = true;
+      queueManualAddBtn.disabled = true;
+      textSpan.innerHTML = `<span class="btn-spinner"></span>${_("queue_loading_playlist")}`;
+    }
     log(`📥 Importiere Playlist: ${url}`, "info");
 
-    const playlistInfo = await invoke<PlaylistInfo>("import_playlist_tracks", { url });
+    const playlistInfo = await invoke<PlaylistInfo>("get_playlist_info", {
+      url,
+      cookiesPath: config.cookies_path || null,
+    });
     let count = 0;
     for (const entry of playlistInfo.entries) {
       if (!clipboardQueue.some(item => item.url === entry.url)) {
         clipboardQueue.push({
           url: entry.url,
           title: entry.title,
-          source: "manual"
+          source
         });
         count++;
       }
     }
     renderQueue();
     log(`✅ Erfolgreich ${count} von ${playlistInfo.total} Titeln aus "${playlistInfo.title}" importiert!`, "success");
-    queueManualInput.value = "";
+    if (isManualImport) queueManualInput.value = "";
   } catch (e) {
     log(`❌ Playlist-Import fehlgeschlagen: ${e}`, "error");
   } finally {
-    queueManualInput.disabled = false;
-    queueManualAddBtn.disabled = false;
-    checkPlaylistUrlInput();
+    if (isManualImport) {
+      queueManualInput.disabled = false;
+      queueManualAddBtn.disabled = false;
+      checkPlaylistUrlInput();
+    }
   }
 }
 
@@ -1538,12 +1575,9 @@ async function importPlaylist(url: string) {
 async function startDownload() {
   let url = urlInput.value.trim();
   if (!url || !config.download_folder) return;
+  const runId = ++downloadRunId;
 
-  isDownloading = true;
-  downloadBtn.disabled = true;
-  cancelBtn.disabled = false;
-  formatSelect.disabled = true;
-  (getEl("convert-btn") as HTMLButtonElement).disabled = true;
+  setDownloadUiState(true);
   completedTracks = 0;
   startTime = Date.now();
   
@@ -1574,9 +1608,13 @@ async function startDownload() {
         cookiesPath: config.cookies_path || null,
       });
 
+      if (!isDownloading || runId !== downloadRunId) return;
+
       totalTracks = info.total;
       playlistEntries = info.entries;
     }
+
+    if (!isDownloading || runId !== downloadRunId) return;
     
     // Reset batch queue mode flag
     isBatchQueueMode = false;
@@ -1655,12 +1693,8 @@ async function startDownload() {
     // Wait for all remaining tasks to finish
     await Promise.all(executing);
 
-    if (isDownloading) {
-      isDownloading = false;
-      downloadBtn.disabled = false;
-      cancelBtn.disabled = true;
-      formatSelect.disabled = false;
-      (getEl("convert-btn") as HTMLButtonElement).disabled = false;
+    if (isDownloading && runId === downloadRunId) {
+      setDownloadUiState(false);
 
       downloadProgress.style.width = "100%";
       convertProgress.style.width = "100%";
@@ -1674,24 +1708,18 @@ async function startDownload() {
       }
     }
   } catch (e) {
+    if (runId !== downloadRunId) return;
     log(`❌ ${e}`, "error");
     setStatus(_("error_occurred"), "error");
-    isDownloading = false;
-    downloadBtn.disabled = false;
-    cancelBtn.disabled = true;
-    formatSelect.disabled = false;
-    (getEl("convert-btn") as HTMLButtonElement).disabled = false;
+    setDownloadUiState(false);
   }
 }
 
 async function cancelDownload() {
-  isDownloading = false; // Sofort auf false setzen, um JS-Schleifen zu stoppen
+  downloadRunId++;
   
   // UI sofort zurücksetzen für besseres Feedback
-  downloadBtn.disabled = false;
-  cancelBtn.disabled = true;
-  formatSelect.disabled = false;
-  (getEl("convert-btn") as HTMLButtonElement).disabled = false;
+  setDownloadUiState(false);
   
   downloadProgress.classList.remove("active");
   totalProgress.classList.remove("active");
@@ -1840,6 +1868,14 @@ function updateDownloadBtnState() {
   const hasUrl = urlInput.value.trim().length > 0;
   const hasFolder = config.download_folder.length > 0;
   downloadBtn.disabled = !hasUrl || !hasFolder || isDownloading;
+}
+
+function setDownloadUiState(downloading: boolean) {
+  isDownloading = downloading;
+  cancelBtn.disabled = !downloading;
+  formatSelect.disabled = downloading;
+  (getEl("convert-btn") as HTMLButtonElement).disabled = downloading;
+  updateDownloadBtnState();
 }
 
 function resetProgress() {

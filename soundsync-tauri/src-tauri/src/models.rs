@@ -69,7 +69,7 @@ impl Default for AppConfig {
             language: "en".to_string(),
             disable_changelog: false,
             auto_url_detection: true,
-            discord_rpc: false,
+            discord_rpc: true,
             accent_color: None,
             custom_background: None,
             quality: "best".to_string(),

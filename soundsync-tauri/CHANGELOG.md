@@ -1,11 +1,11 @@
-----------------------------**V2.3.8**----------------------------
+----------------------------**V2.3.9**----------------------------
 
 **New Features:**
 - **Auto-Relaunch on Winget Installation:** The application now automatically relaunches itself after installing missing dependencies (FFmpeg or yt-dlp) via `winget` to instantly apply PATH changes.
 - **Premium Track-List Animations:** Overhauled track card entrance animations to smoothly slide up from the bottom with a subtle fade and blur, eliminating harsh side-sliding movements.
 - **Robust Settings Coordination:** Fixed race conditions in Discord Rich Presence toggling by ensuring configuration changes are written and persisted in the backend state before the presence status is updated.
 
-----------------------------**V2.3.8**----------------------------
+----------------------------**V2.3.9**----------------------------
 
 ----------------------------**V2.3.7**----------------------------
 
