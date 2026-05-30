@@ -13,16 +13,39 @@
 - **Translation Catalog Expansion:** Added the new log-message keys to the German and English translation files.
 - **Unified Version Bump:** Synchronized all package version tags to `2.3.11` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
-----------------------------**V2.3.11**----------------------------
+---
+
+-------------------------**V2.3.11**----------------------------
+
+----------------------------**V2.3.10**----------------------------
+
+**New Features:**
+
+- **Stable Translated Navigation Labels:** Added dedicated IDs for the top navigation labels so `Downloader`, `Search`, `Trending`, and `Clipboard Queue` can be updated reliably by the runtime translation system.
+
+**Bug Fixes & UX Improvements:**
+
+- **Release Translation Fix:** Fixed a release-build issue where key UI labels stayed in German even when English or another language was selected.
+- **Bundled Translation Loading:** Replaced runtime `/src/i18n/...` fetches with the already bundled JSON imports, making translations work consistently in both dev and built Tauri apps.
+- **Single Language Change Flow:** Removed the duplicate language selector handler so language changes update config, local storage, imported translations, and UI text through one path.
+- **Tab Indicator Refresh:** The active tab indicator now recalculates after language updates so it stays aligned with translated labels.
+
+**Internal:**
+
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.10` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
+
+----------------------------**V2.3.10**----------------------------
 
 ----------------------------**V2.3.7**----------------------------
 
 **New Features:**
+
 - **Transparent Tool Installation:** FFmpeg and yt-dlp install actions now clearly explain that Windows Package Manager (`winget`) is used, show the exact package IDs, and ask for confirmation before starting.
 - **Automatic PO-Token Provider Setup:** Added a one-click setup flow for `bgutil-ytdlp-pot-provider`, including plugin download, provider preparation, Node.js LTS installation when needed, and system status detection.
 - **Admin-Aware Provider Installer:** The PO-Token Provider setup now requests Windows administrator rights through UAC and writes an installation log to `%TEMP%\soundsync-pot-provider-install.log`.
 
 **Bug Fixes & UX Improvements:**
+
 - **PowerShell UAC Fix:** Fixed the elevated PO-Token Provider installer by removing unsupported redirected output parameters from `Start-Process -Verb RunAs`.
 - **System Check Upgrade:** The system check now reports whether the PO-Token Provider is ready or which setup pieces are missing.
 - **Defender-Safe Transparency:** The setup flow does not disable or bypass Windows Defender; users are told when Windows may ask for explicit approval.
@@ -33,12 +56,14 @@
 ----------------------------**V2.3.6**----------------------------
 
 **New Features:**
+
 - **Sammelkorb (Clipboard Queue):** Introduced a brand new clipboard queue tab to collect multiple music links (YouTube, SoundCloud, etc.) and download them all in a single batch with one click.
 - **Companion Browser-Extension:** Built and integrated a companion browser extension (`soundsync-extension`) that lets you send links directly from your web browser to the Downloader's Sammelkorb.
 - **Apple Music Playlist Support:** Added native support for resolving and importing playlists and albums from Apple Music (`music.apple.com`).
 - **Interactive Queue Editing & Manual Imports:** Allows editing track titles in real-time within the queue, plus a dynamic manual input field that imports entire Spotify/Apple Music playlists automatically when detected.
 
 **Bug Fixes & UX Improvements:**
+
 - **Unified Version Bump:** Synchronized all package version tags to `2.3.6` across the entire codebase (`tauri.conf.json`, `Cargo.toml`, `package.json`, `index.html`, and `CHANGELOG.md`).
 
 ----------------------------**V2.3.6**----------------------------
@@ -46,11 +71,13 @@
 ----------------------------**V2.3.5**----------------------------
 
 **New Features:**
+
 - **Auto-Updater on Startup:** Added an automated update check during application startup. If a newer version is available, it gracefully alerts the user with a clean localized dialog to trigger an automatic update, keeping the downloader seamlessly up-to-date.
 - **Backend Modularization & Refactoring:** Restructured the massive Rust backend by splitting the single giant `lib.rs` file into cleanly separated logical modules (`commands.rs`, `models.rs`, `server.rs`, `spotify.rs`, `utils.rs`), improving maintainability and code readability without changing core behaviors.
 - **Premium Overhauled Remote UI:** Redesigned the local network remote interface (`remote.html`) from the ground up, giving it a premium dark glassmorphism aesthetic with Outfit typography, modern gradient highlights, sliding navigation bars, and glowing status indicators.
 
 **Bug Fixes & UX Improvements:**
+
 - **Remote Icon Alignment Fix:** Resolved an issue where icons (like search magnifier and links) in the Remote interface were offset or out of alignment due to Lucide dynamically rendering SVG tags.
 - **Unified Version Bump:** Synchronized all package version tags to `2.3.5` across the entire codebase (`tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, `package.json`, `index.html`, and `CHANGELOG.md`).
 
@@ -59,10 +86,12 @@
 ----------------------------**V2.3.4**----------------------------
 
 **New Features:**
+
 - **Playlist Auto-Scroll Control:** Added a dedicated toggle in Settings to turn the playlist auto-scrolling on or off independently from the log.
 - **Multilingual Settings:** Translated the new playlist auto-scroll settings fully into German, English, and Polish.
 
 **Bug Fixes & UX Improvements:**
+
 - **Instant Settings Saving:** Saving settings now bypasses the debounce delay, instantly writing the configuration to disk before the window closes.
 - **Settings State Synchronization:** Fixed a bug where settings checkboxes (like AI-Tagging) were reset to HTML defaults when opening the settings modal.
 - **Live Settings Application:** Toggles like Eco-Mode and Discord Rich Presence are now applied live in real-time without requiring an application restart.
