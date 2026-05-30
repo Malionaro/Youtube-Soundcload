@@ -32,6 +32,7 @@
   "conversion_label": "🔧 File Conversion",
   "select_file": "Select file:",
   "select_file_placeholder": "Choose a file...",
+  "files_selected": "{count} files selected",
   "target_format": "Target format:",
   "quality": "Quality:",
   "quality_low": "Low",

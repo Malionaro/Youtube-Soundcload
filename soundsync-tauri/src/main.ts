@@ -104,6 +104,7 @@ let pendingDetectedUrl = "";
 let appVersion = "0.0.0";
 let selectedConversionFiles: string[] = [];
 let logScrollPending = false;
+let trackScrollPending = false;
 let isWindowVisible = true;
 let ecoModeActive = false;
 let isTvMode = false;
@@ -256,6 +257,7 @@ function updateQualityOptions() {
 
 async function init() {
   setupElements();
+  document.addEventListener("contextmenu", (event) => event.preventDefault());
   appVersion = await getVersion();
   try {
     const savedLang = localStorage.getItem("language") || "de";
@@ -1753,22 +1755,29 @@ async function startConversion() {
   const inputPath = ($("convert-file-input") as HTMLInputElement).value;
   const outputFormat = ($("convert-format-select") as HTMLSelectElement).value;
   const quality = ($("convert-quality-select") as HTMLSelectElement).value;
+  const filesToConvert = selectedConversionFiles.length > 0 ? selectedConversionFiles : [inputPath].filter(Boolean);
 
-  if (!inputPath) return;
+  if (filesToConvert.length === 0) return;
 
   $("modal-progress-container").style.display = "block";
   ($("modal-convert-progress") as HTMLElement).style.width = "0%";
   $("convert-status-text").textContent = _("converting");
   $("convert-status-text").className = "status-text converting";
+  (getEl("start-convert-btn") as HTMLButtonElement).disabled = true;
 
   try {
-    await invoke("convert_file", {
-      request: { input_path: inputPath, output_format: outputFormat, quality },
-    });
+    for (const file of filesToConvert) {
+      $("convert-status-text").textContent = `${_("converting")} ${file.split(/[\\/]/).pop() || file}`;
+      await invoke("convert_file", {
+        request: { input_path: file, output_format: outputFormat, quality },
+      });
+    }
   } catch (e) {
     $("convert-status-text").textContent = `❌ ${e}`;
     $("convert-status-text").className = "status-text error";
     $("modal-progress-container").style.display = "none";
+  } finally {
+    (getEl("start-convert-btn") as HTMLButtonElement).disabled = false;
   }
 }
 
@@ -1934,11 +1943,37 @@ function updateTotalProgress(currentTrackIndex?: number, trackPercent?: number) 
   const nextActive = document.getElementById(`track-card-${activeIdx}`);
   if (nextActive) {
     nextActive.classList.add("active");
-    // Auto-scroll sidebar to keep current track visible
     if (config.auto_scroll_tracks !== false) {
-      nextActive.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      scrollTrackIntoView(nextActive);
     }
   }
+}
+
+function scrollTrackIntoView(track: HTMLElement) {
+  if (trackScrollPending) return;
+  trackScrollPending = true;
+
+  requestAnimationFrame(() => {
+    const listRect = trackList.getBoundingClientRect();
+    const trackRect = track.getBoundingClientRect();
+    const padding = 12;
+
+    if (trackRect.top < listRect.top + padding) {
+      trackList.scrollTo({
+        top: trackList.scrollTop - (listRect.top + padding - trackRect.top),
+        behavior: "smooth",
+      });
+    } else if (trackRect.bottom > listRect.bottom - padding) {
+      trackList.scrollTo({
+        top: trackList.scrollTop + (trackRect.bottom - listRect.bottom + padding),
+        behavior: "smooth",
+      });
+    }
+
+    window.setTimeout(() => {
+      trackScrollPending = false;
+    }, 120);
+  });
 }
 
 function formatTime(seconds: number): string {

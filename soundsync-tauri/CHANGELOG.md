@@ -1,21 +1,20 @@
-----------------------------**V2.3.11**----------------------------
+----------------------------**V2.3.12**----------------------------
 
 **New Features:**
-- **Localized Activity Log Messages:** Most SoundSync-generated log entries now use the active app language instead of hardcoded German or English text.
-- **Reusable Log Translation Helper:** Added a shared `logKey(...)` helper so new log messages can consistently use i18n keys and placeholder variables.
+- **Multi-File Conversion Path Handling:** The conversion dialog now keeps the real selected file paths internally, even when the UI displays a localized “files selected” summary.
 
 **Bug Fixes & UX Improvements:**
-- **Language-Synced Queue Logs:** Queue actions like adding links, importing playlists, clearing the queue, and duplicate-link warnings now follow the selected language.
-- **Language-Synced Settings Logs:** Settings, theme, background, folder, cookies, TV mode, and auto-detection messages now follow the selected language.
-- **Language-Synced Update/System Logs:** Update checks, restart hints, system-check failures, copy errors, and config-save errors now use localized text.
+- **SoundCloud Set Track Names:** Improved playlist parsing so SoundCloud playlist/set entries keep useful track names instead of falling back to generic queue labels.
+- **SoundCloud Set URLs:** Playlist parsing now prefers `webpage_url`/`original_url` before raw extractor URLs, improving queue imports and downloads from SoundCloud sets.
+- **Conversion Start Fix:** Fixed conversion starting with the visible input label instead of the selected file path when multiple files were chosen.
 
 **Internal:**
-- **Translation Catalog Expansion:** Added the new log-message keys to the German and English translation files.
-- **Unified Version Bump:** Synchronized all package version tags to `2.3.11` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
+- **Conversion Translation Keys:** Added localized `files_selected` text for German, English, and Polish.
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.12` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
 ---
 
--------------------------**V2.3.11**----------------------------
+----------------------------**V2.3.12**----------------------------
 
 ----------------------------**V2.3.10**----------------------------
 

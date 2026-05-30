@@ -761,16 +761,17 @@
         }
 
         .player-controls-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
             align-items: center;
-            justify-content: space-between;
+            gap: 12px;
         }
 
         .player-volume {
             display: flex;
             align-items: center;
             gap: 8px;
-            width: 30%;
+            min-width: 0;
         }
 
         .player-volume i,
@@ -782,12 +783,21 @@
 
         .player-volume input[type="range"] {
             height: 3px;
+            width: 100%;
+            min-width: 0;
         }
 
         .player-buttons {
             display: flex;
             align-items: center;
-            gap: 16px;
+            justify-content: center;
+            gap: 10px;
+            flex-shrink: 0;
+            justify-self: center;
+        }
+
+        .player-controls-spacer {
+            min-width: 0;
         }
 
         .player-btn {
@@ -830,6 +840,22 @@
         .player-btn.play-toggle svg {
             width: 18px;
             height: 18px;
+        }
+
+        @media (max-width: 390px) {
+            .player-controls-row {
+                grid-template-columns: 1fr;
+                justify-items: center;
+                gap: 14px;
+            }
+
+            .player-volume {
+                width: 100%;
+            }
+
+            .player-controls-spacer {
+                display: none;
+            }
         }
 
         /* Footer credits */
@@ -958,8 +984,7 @@
                         </button>
                     </div>
 
-                    <!-- spacer to balance layout -->
-                    <div style="width: 30%;"></div>
+                    <div class="player-controls-spacer" aria-hidden="true"></div>
                 </div>
             </div>
 

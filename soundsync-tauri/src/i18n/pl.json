@@ -32,6 +32,7 @@
   "conversion_label": "🔧 Konwersja pliku",
   "select_file": "Wybierz plik:",
   "select_file_placeholder": "Wybierz plik...",
+  "files_selected": "Wybrano pliki: {count}",
   "target_format": "Format docelowy:",
   "quality": "Jakość:",
   "quality_low": "Niska",

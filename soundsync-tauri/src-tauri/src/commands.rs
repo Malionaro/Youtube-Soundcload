@@ -304,19 +304,8 @@ pub async fn get_playlist_info(
             continue;
         }
         if let Ok(info) = serde_json::from_str::<serde_json::Value>(line) {
-            let title = info
-                .get("title")
-                .and_then(|v| v.as_str())
-                .unwrap_or(&format!("Track {}", idx + 1))
-                .to_string();
-
-            let entry_url = info
-                .get("url")
-                .or_else(|| info.get("webpage_url"))
-                .or_else(|| info.get("original_url"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let title = playlist_entry_title(&info, idx);
+            let entry_url = playlist_entry_url(&info);
 
             let thumbnail = info
                 .get("thumbnail")
@@ -355,6 +344,47 @@ pub async fn get_playlist_info(
         entries,
         total,
     })
+}
+
+fn playlist_entry_title(info: &serde_json::Value, idx: usize) -> String {
+    for key in ["title", "fulltitle", "track", "alt_title", "display_id"] {
+        if let Some(value) = info.get(key).and_then(|v| v.as_str()) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    for key in ["webpage_url", "original_url", "url"] {
+        if let Some(value) = info.get(key).and_then(|v| v.as_str()) {
+            if let Some(name) = value.trim_end_matches('/').rsplit('/').next() {
+                let name = name.replace('-', " ").replace('_', " ");
+                let trimmed = name.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with("http") {
+                    return trimmed.to_string();
+                }
+            }
+        }
+    }
+
+    format!("Track {}", idx + 1)
+}
+
+fn playlist_entry_url(info: &serde_json::Value) -> String {
+    for key in ["webpage_url", "original_url", "url"] {
+        if let Some(value) = info.get(key).and_then(|v| v.as_str()) {
+            let trimmed = value.trim();
+            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    info.get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 #[tauri::command]

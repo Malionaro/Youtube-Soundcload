@@ -32,6 +32,7 @@
   "conversion_label": "🔧 Dateikonvertierung",
   "select_file": "Datei auswählen:",
   "select_file_placeholder": "Wählen Sie eine Datei...",
+  "files_selected": "{count} Dateien ausgewählt",
   "target_format": "Zielformat:",
   "quality": "Qualität:",
   "quality_low": "Niedrig",
