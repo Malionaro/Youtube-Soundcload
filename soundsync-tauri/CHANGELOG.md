@@ -1,21 +1,18 @@
-----------------------------**V2.3.9**----------------------------
+----------------------------**V2.3.10**----------------------------
 
 **New Features:**
-- **Playlist Search Mode:** Added a search type selector so the Search tab can now look for either individual tracks or YouTube playlists.
-- **Playlist Results to Sammelkorb:** Playlist search results can be sent directly to the Sammelkorb, where they are resolved into individual downloadable tracks.
-- **Smarter Sammelkorb Imports:** The Sammelkorb now recognizes playlist links from YouTube, Spotify, Apple Music, and SoundCloud Sets and expands them into separate queue items instead of showing the playlist as one entry.
-- **Discord Rich Presence Download Button:** Added a Rich Presence button that links users to the project's GitHub download page.
+- **Stable Translated Navigation Labels:** Added dedicated IDs for the top navigation labels so `Downloader`, `Search`, `Trending`, and `Clipboard Queue` can be updated reliably by the runtime translation system.
 
 **Bug Fixes & UX Improvements:**
-- **Cancel Button Recovery:** Fixed an issue where pressing `Abbrechen` could leave controls like folder selection, cookies selection, and folder opening unusable after cancellation.
-- **Robust Download State Handling:** Added a download run guard so old async download or analysis tasks cannot re-disable UI controls after a cancellation.
-- **Discord Rich Presence Reliability:** Improved Discord RPC reconnect handling, text sanitization, Activity validation, and visible logging for connection/update errors.
-- **Discord RPC Default State:** Discord Rich Presence is now enabled by default in both frontend and backend defaults.
+- **Release Translation Fix:** Fixed a release-build issue where key UI labels stayed in German even when English or another language was selected.
+- **Bundled Translation Loading:** Replaced runtime `/src/i18n/...` fetches with the already bundled JSON imports, making translations work consistently in both dev and built Tauri apps.
+- **Single Language Change Flow:** Removed the duplicate language selector handler so language changes update config, local storage, imported translations, and UI text through one path.
+- **Tab Indicator Refresh:** The active tab indicator now recalculates after language updates so it stays aligned with translated labels.
 
 **Internal:**
-- **Unified Version Bump:** Synchronized all package version tags to `2.3.9` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.10` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
-----------------------------**V2.3.9**----------------------------
+----------------------------**V2.3.10**----------------------------
 
 ----------------------------**V2.3.7**----------------------------
 

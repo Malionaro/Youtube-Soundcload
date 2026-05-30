@@ -297,8 +297,7 @@ async function init() {
     updateDiscordPresence("Ready to download", "Waiting for URLs...");
     
     if (config.language) {
-      currentLang = config.language;
-      t = translations[currentLang];
+      await loadTranslations(config.language);
       (document.getElementById("language-select") as HTMLSelectElement).value = currentLang;
     }
   } catch (e) {
@@ -538,6 +537,10 @@ async function checkForUpdates(manual: boolean = false) {
 
 // ─── UI Update ───────────────────────────────────────────────────────────────
 function updateUI() {
+  $("tab-downloader-label").textContent = _("tab_downloader");
+  $("tab-search-label").textContent = _("tab_search");
+  $("tab-trending-label").textContent = _("tab_trending");
+  $("tab-queue-label").textContent = _("tab_queue");
   $("url-label").textContent = _("url_label");
   urlInput.placeholder = _("url_placeholder");
   $("folder-label").textContent = _("folder_label");
@@ -569,6 +572,15 @@ function updateUI() {
   $("log-search").setAttribute("placeholder", _("search_placeholder"));
   const autoUrlToggle = document.getElementById("auto-url-toggle") as HTMLInputElement;
   if (autoUrlToggle) autoUrlToggle.checked = config.auto_url_detection;
+  refreshActiveTabIndicator();
+}
+
+function refreshActiveTabIndicator() {
+  const indicator = document.getElementById("nav-indicator");
+  const activeTab = document.querySelector(".tab-btn.active") as HTMLElement | null;
+  if (!indicator || !activeTab) return;
+  indicator.style.transform = `translateX(${activeTab.offsetLeft}px)`;
+  indicator.style.width = `${activeTab.offsetWidth}px`;
 }
 
 // ─── Event Listeners ─────────────────────────────────────────────────────────
@@ -818,12 +830,12 @@ function setupEventListeners() {
   on("theme-toggle", "click", toggleTheme);
 
   // Language
-  on("language-select", "change", (e) => {
+  on("language-select", "change", async (e) => {
     const lang = (e.target as HTMLSelectElement).value;
     if (translations[lang]) {
-      currentLang = lang;
-      t = translations[lang];
       config.language = lang;
+      localStorage.setItem("language", lang);
+      await loadTranslations(lang);
       void saveConfig();
       updateUI();
       log(`🌐 Language: ${lang}`, "info");
@@ -833,13 +845,6 @@ function setupEventListeners() {
   // Convert modal
   on("convert-btn", "click", () => {
     $("convert-modal").style.display = "flex";
-  });
-  
-  // Language Select
-  on("language-select", "change", async (e: Event) => {
-    const lang = (e.target as HTMLSelectElement).value;
-    localStorage.setItem("language", lang);
-    await loadTranslations(lang);
   });
   
   // TV Mode Toggle
@@ -2128,14 +2133,11 @@ const saveConfig = debounce(saveConfigImmediate, 500);
 // ─── Translations ────────────────────────────────────────────────────────────
 
 async function loadTranslations(lang: string) {
-  try {
-    const response = await fetch(`/src/i18n/${lang}.json`);
-    if (!response.ok) throw new Error("Failed to load translations");
-    currentTranslations = await response.json();
-    applyTranslations();
-  } catch (error) {
-    console.error("Translation load error:", error);
-  }
+  const nextTranslations = translations[lang] || translations.en;
+  currentLang = translations[lang] ? lang : "en";
+  t = nextTranslations;
+  currentTranslations = nextTranslations;
+  applyTranslations();
 }
 
 function applyTranslations() {
