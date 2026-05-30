@@ -1,18 +1,19 @@
-----------------------------**V2.3.10**----------------------------
+----------------------------**V2.3.11**----------------------------
 
 **New Features:**
-- **Stable Translated Navigation Labels:** Added dedicated IDs for the top navigation labels so `Downloader`, `Search`, `Trending`, and `Clipboard Queue` can be updated reliably by the runtime translation system.
+- **Localized Activity Log Messages:** Most SoundSync-generated log entries now use the active app language instead of hardcoded German or English text.
+- **Reusable Log Translation Helper:** Added a shared `logKey(...)` helper so new log messages can consistently use i18n keys and placeholder variables.
 
 **Bug Fixes & UX Improvements:**
-- **Release Translation Fix:** Fixed a release-build issue where key UI labels stayed in German even when English or another language was selected.
-- **Bundled Translation Loading:** Replaced runtime `/src/i18n/...` fetches with the already bundled JSON imports, making translations work consistently in both dev and built Tauri apps.
-- **Single Language Change Flow:** Removed the duplicate language selector handler so language changes update config, local storage, imported translations, and UI text through one path.
-- **Tab Indicator Refresh:** The active tab indicator now recalculates after language updates so it stays aligned with translated labels.
+- **Language-Synced Queue Logs:** Queue actions like adding links, importing playlists, clearing the queue, and duplicate-link warnings now follow the selected language.
+- **Language-Synced Settings Logs:** Settings, theme, background, folder, cookies, TV mode, and auto-detection messages now follow the selected language.
+- **Language-Synced Update/System Logs:** Update checks, restart hints, system-check failures, copy errors, and config-save errors now use localized text.
 
 **Internal:**
-- **Unified Version Bump:** Synchronized all package version tags to `2.3.10` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
+- **Translation Catalog Expansion:** Added the new log-message keys to the German and English translation files.
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.11` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
-----------------------------**V2.3.10**----------------------------
+----------------------------**V2.3.11**----------------------------
 
 ----------------------------**V2.3.7**----------------------------
 

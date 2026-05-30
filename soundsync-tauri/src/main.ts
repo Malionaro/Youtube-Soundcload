@@ -413,15 +413,19 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function logKey(key: string, type: string = "info", vars: Record<string, string> = {}) {
+  log(_(key, vars), type);
+}
+
 async function updateDiscordPresence(details: string, state_msg: string) {
   try {
     await invoke("update_discord_presence", { details, stateMsg: state_msg });
     if (config.discord_rpc && !discordRpcLogged) {
       discordRpcLogged = true;
-      log("Discord RPC aktualisiert", "info");
+      logKey("log_discord_rpc_updated", "info");
     }
   } catch (e) {
-    log(`ℹ️ Discord RPC: ${e}`, "info");
+    logKey("log_discord_rpc_error", "info", { error: String(e) });
   }
 }
 
@@ -520,14 +524,14 @@ async function checkForUpdates(manual: boolean = false) {
     } else {
       tag.textContent = "Aktuell";
       tag.className = "status-tag";
-      if (manual) log("✅ SoundSync ist auf dem neuesten Stand", "success");
+      if (manual) logKey("log_app_up_to_date", "success");
     }
   } catch (e) {
     console.warn("GitHub Update Check failed:", e);
     if (manual) {
       tag.textContent = "Fehler";
       tag.className = "status-tag error";
-      log(`ℹ️ Update-Prüfung: Verbindung zu GitHub fehlgeschlagen`, "warning");
+      logKey("log_update_check_failed", "warning");
     }
   } finally {
     btn.disabled = false;
@@ -590,11 +594,11 @@ function setupEventListeners() {
     config.auto_url_detection = (e.target as HTMLInputElement).checked;
     if (config.auto_url_detection) {
       startClipboardWatcher();
-      log("Automatische URL-Erkennung aktiviert", "success");
+      logKey("log_auto_url_enabled", "success");
     } else {
       stopClipboardWatcher();
       hideDetectedUrlPrompt();
-      log("Automatische URL-Erkennung deaktiviert", "warning");
+      logKey("log_auto_url_disabled", "warning");
     }
     saveConfig();
   });
@@ -621,7 +625,7 @@ function setupEventListeners() {
 
   on("accent-color-picker", "change", () => {
     saveConfig();
-    log("🎨 Akzentfarbe gespeichert", "success");
+    logKey("log_accent_saved", "success");
   });
 
   on("reset-theme-btn", "click", () => {
@@ -631,7 +635,7 @@ function setupEventListeners() {
     if (picker) picker.value = "#6c5ce7";
     applyTheme();
     saveConfig();
-    log("🔄 Design zurückgesetzt", "info");
+    logKey("log_theme_reset", "info");
   });
 
   on("bg-browse-btn", "click", async () => {
@@ -643,7 +647,7 @@ function setupEventListeners() {
       config.custom_background = file as string; // Store raw path, not asset URL
       applyTheme();
       saveConfig();
-      log("🖼️ Hintergrundbild aktualisiert", "success");
+      logKey("log_background_updated", "success");
     }
   });
 
@@ -683,7 +687,7 @@ function setupEventListeners() {
     }
     
     ($("settings-modal") as HTMLElement).style.display = "none";
-    log("⚙️ Einstellungen gespeichert", "success");
+    logKey("log_settings_saved", "success");
   });
 
   on("check-update-btn", "click", () => checkForUpdates(true));
@@ -696,11 +700,11 @@ function setupEventListeners() {
 
   if (config.auto_url_detection) {
       startClipboardWatcher();
-      log("Automatische URL-Erkennung aktiviert", "success");
+      logKey("log_auto_url_enabled", "success");
     } else {
       stopClipboardWatcher();
       hideDetectedUrlPrompt();
-      log("Automatische URL-Erkennung deaktiviert", "warning");
+      logKey("log_auto_url_disabled", "warning");
   }
 
   on("detected-url-use", "click", useDetectedUrl);
@@ -749,7 +753,7 @@ function setupEventListeners() {
     if (isDownloading) return;
     urlInput.value = "";
     updateDownloadBtnState();
-    log("🧹 URL und Liste geleert", "info");
+    logKey("log_url_list_cleared", "info");
     trackList.querySelectorAll(".track-card").forEach(el => el.remove());
     resetProgress();
     setStatus(_("ready"), "info");
@@ -764,7 +768,7 @@ function setupEventListeners() {
       config.download_folder = folder as string;
       folderInput.value = config.download_folder;
       void saveConfig();
-      log(`✅ Folder set: ${config.download_folder}`, "success");
+      logKey("log_folder_set", "success", { path: config.download_folder });
       updateDownloadBtnState();
     }
   });
@@ -775,7 +779,7 @@ function setupEventListeners() {
       try {
         await openPath(config.download_folder);
       } catch (e) {
-        log("Fehler beim Öffnen des Ordners: " + e, "error");
+        logKey("log_open_folder_failed", "error", { error: String(e) });
       }
     }
   });
@@ -790,7 +794,7 @@ function setupEventListeners() {
       config.cookies_path = file as string;
       cookiesInput.value = config.cookies_path;
       void saveConfig();
-      log(`🍪 YouTube Cookies geladen: ${config.cookies_path}`, "info");
+      logKey("log_cookies_loaded", "info", { path: config.cookies_path });
     }
   });
 
@@ -801,7 +805,7 @@ function setupEventListeners() {
   // Clear log
   on("clear-log-btn", "click", () => {
     logOutput.innerHTML = "";
-    log("🧹 Log cleared", "info");
+    logKey("log_cleared", "info");
   });
 
   // Format and Quality changes
@@ -838,7 +842,7 @@ function setupEventListeners() {
       await loadTranslations(lang);
       void saveConfig();
       updateUI();
-      log(`🌐 Language: ${lang}`, "info");
+      logKey("log_language_changed", "info", { lang });
     }
   });
 
@@ -852,12 +856,12 @@ function setupEventListeners() {
     isTvMode = !isTvMode;
     if (isTvMode) {
       document.body.classList.add("tv-mode");
-      log("📺 TV-Modus aktiviert", "info");
+      logKey("log_tv_mode_enabled", "info");
       // Focus first input
       setTimeout(() => urlInput?.focus(), 100);
     } else {
       document.body.classList.remove("tv-mode");
-      log("📺 TV-Modus deaktiviert", "info");
+      logKey("log_tv_mode_disabled", "info");
     }
   });
 
@@ -887,7 +891,7 @@ function setupEventListeners() {
     } else if (e.key === "Escape") {
       isTvMode = false;
       document.body.classList.remove("tv-mode");
-      log("📺 TV-Modus deaktiviert", "info");
+      logKey("log_tv_mode_disabled", "info");
     }
   });
 
@@ -947,7 +951,7 @@ function setupEventListeners() {
       const res = await invoke<string>("install_ffmpeg");
       log(`✅ ${res}`, "success");
       await checkSystem();
-      log("Restarting application to apply path changes...", "info");
+      logKey("log_restarting_for_path", "info");
       setTimeout(async () => {
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
@@ -975,7 +979,7 @@ function setupEventListeners() {
       const res = await invoke<string>("install_ytdlp");
       log(`✅ ${res}`, "success");
       await checkSystem();
-      log("Restarting application to apply path changes...", "info");
+      logKey("log_restarting_for_path", "info");
       setTimeout(async () => {
         const { relaunch } = await import("@tauri-apps/plugin-process");
         await relaunch();
@@ -1032,7 +1036,7 @@ function setupEventListeners() {
       if (text && (text.includes("youtube") || text.includes("soundcloud") || text.includes("youtu.be"))) {
         urlInput.value = text;
         updateDownloadBtnState();
-        log(`📋 URL dropped: ${text}`, "info");
+        logKey("log_url_dropped", "info", { url: text });
       }
     });
   }
@@ -1049,7 +1053,7 @@ function setupEventListeners() {
     if (e.ctrlKey && e.key === "l") {
       e.preventDefault();
       logOutput.innerHTML = "";
-      log("🧹 Log cleared via shortcut", "info");
+      logKey("log_cleared_shortcut", "info");
     }
 
     // Open Settings: Ctrl + ,
@@ -1205,16 +1209,16 @@ function setupTauriListeners() {
         formatSelect.dispatchEvent(new Event("change"));
       }
       updateDownloadBtnState();
-      log(`📱 Link vom Gerät empfangen: ${p.url}`, "success");
+      logKey("log_remote_link_received", "success", { url: p.url });
       if (!downloadBtn.disabled && !isDownloading) {
-        log(`🚀 Automatischer Download gestartet...`, "info");
+        logKey("log_auto_download_started", "info");
         startDownload();
       } else {
-        log(`⚠️ Auto-Start abgebrochen: Ordner fehlt oder Download läuft bereits.`, "warning");
+        logKey("log_auto_start_cancelled", "warning");
       }
     } else {
       void addToQueue(p.url, "extension");
-      log(`🔌 Link von Browser-Extension erhalten und in Sammelkorb gelegt`, "success");
+      logKey("log_extension_link_queued", "success");
       
       // Native notification that it was added
       try {
@@ -1303,7 +1307,7 @@ function useDetectedUrl() {
   if (!pendingDetectedUrl) return;
   urlInput.value = pendingDetectedUrl;
   updateDownloadBtnState();
-  log(`URL übernommen: ${pendingDetectedUrl}`, "success");
+  logKey("log_url_accepted", "success", { url: pendingDetectedUrl });
   hideDetectedUrlPrompt();
 }
 
@@ -1344,7 +1348,7 @@ function isPlaylistQueueUrl(url: string): boolean {
 async function addToQueue(url: string, source: "clipboard" | "extension" | "manual", title?: string) {
   // Simple validation to ensure it looks like a URL
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    log(`⚠️ Ungültiger Link: ${url}`, "warning");
+    logKey("log_invalid_link", "warning", { url });
     return;
   }
 
@@ -1355,7 +1359,7 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
 
   // Check duplicate
   if (clipboardQueue.some(item => item.url === url)) {
-    log(`ℹ️ Link bereits im Sammelkorb: ${url}`, "info");
+    logKey("log_link_already_queued", "info", { url });
     return;
   }
 
@@ -1378,7 +1382,7 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
   }
 
   clipboardQueue.push({ url, title: inferredTitle, source });
-  log(`📥 Link zum Korb hinzugefügt: ${inferredTitle}`, "success");
+  logKey("log_link_added_queue", "success", { title: inferredTitle });
   
   // Play dynamic scale animation on queue badge
   if (queueBadge) {
@@ -1471,7 +1475,7 @@ function renderQueue() {
     // Handle single item deletion
     card.querySelector(".queue-card-remove")?.addEventListener("click", () => {
       clipboardQueue.splice(idx, 1);
-      log(`🗑️ Link aus Korb entfernt`, "info");
+      logKey("log_link_removed_queue", "info");
       renderQueue();
     });
 
@@ -1481,14 +1485,14 @@ function renderQueue() {
 
 function clearQueue() {
   clipboardQueue = [];
-  log("🧹 Sammelkorb vollständig geleert", "info");
+  logKey("log_queue_cleared", "info");
   renderQueue();
 }
 
 function startBatchDownload() {
   if (clipboardQueue.length === 0) return;
 
-  log(`🚀 Batch-Download von ${clipboardQueue.length} Titeln aus Sammelkorb gestartet...`, "info");
+  logKey("log_batch_started", "info", { count: String(clipboardQueue.length) });
 
   // Map to playlist entries
   playlistEntries = clipboardQueue.map((item, idx) => ({
@@ -1545,7 +1549,7 @@ async function importPlaylist(url: string, source: "clipboard" | "extension" | "
       queueManualAddBtn.disabled = true;
       textSpan.innerHTML = `<span class="btn-spinner"></span>${_("queue_loading_playlist")}`;
     }
-    log(`📥 Importiere Playlist: ${url}`, "info");
+    logKey("log_importing_playlist", "info", { url });
 
     const playlistInfo = await invoke<PlaylistInfo>("get_playlist_info", {
       url,
@@ -1563,10 +1567,14 @@ async function importPlaylist(url: string, source: "clipboard" | "extension" | "
       }
     }
     renderQueue();
-    log(`✅ Erfolgreich ${count} von ${playlistInfo.total} Titeln aus "${playlistInfo.title}" importiert!`, "success");
+    logKey("log_playlist_imported", "success", {
+      count: String(count),
+      total: String(playlistInfo.total),
+      title: playlistInfo.title,
+    });
     if (isManualImport) queueManualInput.value = "";
   } catch (e) {
-    log(`❌ Playlist-Import fehlgeschlagen: ${e}`, "error");
+    logKey("log_playlist_import_failed", "error", { error: String(e) });
   } finally {
     if (isManualImport) {
       queueManualInput.disabled = false;
@@ -1708,7 +1716,7 @@ async function startDownload() {
       $("progress-label").textContent = _("download_complete");
       log(`🎉 ${_("download_complete")} ${completedTracks}/${totalTracks}`, "success");
       if (config.after_download && config.after_download !== "nothing") {
-        log(`⚡ Executing action: ${config.after_download}`, "info");
+        logKey("log_executing_action", "info", { action: config.after_download });
         await invoke("execute_after_download_action", { action: config.after_download });
       }
     }
@@ -1829,7 +1837,7 @@ async function checkSystem(autoShowModal: boolean = true) {
       potButton.style.display = result.pot_provider_installed ? "none" : "inline-flex";
     }
   } catch (e) {
-    log(`⚠️ System check failed: ${e}`, "warning");
+    logKey("log_system_check_failed", "warning", { error: String(e) });
   }
 }
 
@@ -2055,10 +2063,10 @@ async function updateRemoteStatus() {
           const originalSVG = btn.innerHTML;
           btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
           setTimeout(() => btn.innerHTML = originalSVG, 2000);
-          log("📋 Link kopiert!", "success");
+          logKey("log_link_copied", "success");
         } catch (e) {
           console.error("Clipboard error", e);
-          log("❌ Fehler beim Kopieren", "error");
+          logKey("log_copy_failed", "error");
         }
       });
     }
@@ -2124,7 +2132,7 @@ async function saveConfigImmediate() {
     await invoke("save_config", { config });
   } catch (e) {
     console.error("Failed to save config:", e);
-    log(`Config konnte nicht gespeichert werden: ${e}`, "warning");
+    logKey("log_config_save_failed", "warning", { error: String(e) });
   }
 }
 
