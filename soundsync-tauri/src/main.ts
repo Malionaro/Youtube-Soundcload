@@ -157,6 +157,7 @@ let ecoModeActive = false;
 let isTvMode = false;
 let currentTranslations: Record<string, string> = {};
 let notificationActionListenerReady = false;
+let trackProgressByIndex = new Map<number, number>();
 
 let isBatchQueueMode = false;
 interface QueueItem {
@@ -1131,11 +1132,11 @@ function setupTauriListeners() {
 
     // Global progress
     if (p.status === "downloading") {
-      updateTotalProgress(p.current, p.percent);
-      downloadProgress.style.width = `${p.percent}%`;
-      $("progress-percent").textContent = `${p.percent.toFixed(1)}%`;
+      const overallPercent = updateTotalProgress(p.current, p.percent);
+      downloadProgress.style.width = `${overallPercent}%`;
+      $("progress-percent").textContent = `${overallPercent.toFixed(1)}%`;
       $("progress-label").textContent = _("progress_downloading", {
-        percent: p.percent.toFixed(0),
+        percent: overallPercent.toFixed(0),
         speed: p.speed || "...",
         eta: p.eta || "...",
       });
@@ -1714,6 +1715,7 @@ async function startDownload() {
 
   setDownloadUiState(true);
   completedTracks = 0;
+  trackProgressByIndex = new Map();
   startTime = Date.now();
   
   if (!isBatchQueueMode) {
@@ -1810,6 +1812,7 @@ async function startDownload() {
         } finally {
           if (card) card.classList.remove("active");
           if (isDownloading) {
+            trackProgressByIndex.delete(i + 1);
             completedTracks++;
             updateTotalProgress();
           }
@@ -2030,15 +2033,17 @@ function resetProgress() {
 }
 
 function updateTotalProgress(currentTrackIndex?: number, trackPercent?: number) {
-  if (totalTracks <= 0) return;
-  
-  // Real-time overall value: (completed tracks + progress of current track)
-  let currentOverallValue = completedTracks;
+  if (totalTracks <= 0) return 0;
   if (currentTrackIndex !== undefined && trackPercent !== undefined) {
-    if (currentTrackIndex > completedTracks) {
-       currentOverallValue = (currentTrackIndex - 1) + (trackPercent / 100);
-    }
+    trackProgressByIndex.set(currentTrackIndex, Math.max(0, Math.min(100, trackPercent)));
   }
+  
+  // Real-time overall value: completed tracks plus partial progress from all active parallel downloads.
+  const activeProgressValue = Array.from(trackProgressByIndex.values()).reduce(
+    (sum, percent) => sum + (percent / 100),
+    0,
+  );
+  const currentOverallValue = Math.min(totalTracks, completedTracks + activeProgressValue);
 
   const pct = (currentOverallValue / totalTracks) * 100;
   totalProgress.style.width = `${pct}%`;
@@ -2055,18 +2060,7 @@ function updateTotalProgress(currentTrackIndex?: number, trackPercent?: number) 
     total: String(totalTracks),
     eta,
   });
-
-  // Highlight active track card efficiently
-  const activeIdx = currentTrackIndex ? currentTrackIndex : completedTracks + 1;
-  const prevActive = trackList.querySelector(".track-card.active");
-  if (prevActive) prevActive.classList.remove("active");
-  const nextActive = document.getElementById(`track-card-${activeIdx}`);
-  if (nextActive) {
-    nextActive.classList.add("active");
-    if (config.auto_scroll_tracks !== false) {
-      scrollTrackIntoView(nextActive);
-    }
-  }
+  return pct;
 }
 
 function scrollTrackIntoView(track: HTMLElement) {

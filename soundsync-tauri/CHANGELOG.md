@@ -1,4 +1,4 @@
-----------------------------**V2.3.13**----------------------------
+----------------------------**V2.3.14**----------------------------
 
 **New Features:**
 - **Multi-Link Clipboard Detection:** Auto-URL detection now finds multiple supported links in the clipboard and can add all detected links to the queue at once.
@@ -9,14 +9,13 @@
 - **Notification Translation Fix:** Fixed Windows notifications showing raw translation keys instead of readable text.
 - **Remote Player Layout Fix:** Improved the Remote player controls so volume and playback buttons no longer overlap on narrow screens.
 - **Better Download Error Details:** Download and conversion failures now show a readable cause, a suggested fix, and the relevant raw details in the activity log.
+- **Stable Parallel Download UI:** The downloader still runs three downloads in parallel, but the track list no longer jumps between active items on every progress update. Multiple active downloads can now stay highlighted at the same time and the total progress is calculated from all running downloads.
 
 **Internal:**
 - **Remote Config Endpoint:** Added a `/remote-config` endpoint so the Remote UI can read the active language from the app config.
 - **yt-dlp Error Detail Capture:** Download failures now include the last stderr lines from `yt-dlp` instead of only returning an exit code.
 - **Translation Catalog Expansion:** Added new German, English, and Polish strings for notifications, Remote UI, and download error diagnosis.
-- **Unified Version Bump:** Synchronized all package version tags to `2.3.13` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
-
----
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.14` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
 ----------------------------**V2.3.12**----------------------------
 
