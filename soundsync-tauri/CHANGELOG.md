@@ -1,20 +1,40 @@
-----------------------------**V2.3.13**----------------------------
+----------------------------**V2.3.15**----------------------------
 
 **New Features:**
-- **Multi-Link Clipboard Detection:** Auto-URL detection now finds multiple supported links in the clipboard and can add all detected links to the queue at once.
-- **Clickable Notifications:** Clicking a SoundSync desktop notification now restores, shows, and focuses the app window.
-- **Remote Language Sync:** SoundSync Remote now follows the main app language and supports German, English, and Polish text in its mobile UI.
+- **Tray Context Menu Shortcuts:** Added a new "Download-Ordner öffnen" (Open Download Folder) option directly to the system tray right-click context menu.
 
-**Bug Fixes & UX Improvements:**
-- **Notification Translation Fix:** Fixed Windows notifications showing raw translation keys instead of readable text.
-- **Remote Player Layout Fix:** Improved the Remote player controls so volume and playback buttons no longer overlap on narrow screens.
-- **Better Download Error Details:** Download and conversion failures now show a readable cause, a suggested fix, and the relevant raw details in the activity log.
+**Bug Fixes & UI/UX Improvements:**
+- **Symmetrical Action Buttons:** Made all main action buttons (Download, Cancel, Convert) perfectly equal in width and height.
+- **Vertical Form Sizing & Alignment:** Set `.select-input` dropdowns to `44px` height and redesigned `#open-folder-btn` to match, ensuring perfect line alignment and symmetry across the configuration row.
+- **Activity Log Sizing Symmetries:** Unified the small buttons (e.g. "Log leeren") and search inputs in the log panel to a consistent `36px` height.
+- **Dropdown Double Arrow Bug Fix:** Resolved duplicate arrow indicators in Chrome 130+ by disabling the custom CSS chevron when `appearance: base-select` is active.
+- **Dropdown Vertical Text Centering:** Centered selected item text inside select fields vertically by adding `line-height: 42px;`.
+- **Header Language Sizing:** Made the language select dropdown in the header equal in height (`38px`) and aligned with the header buttons.
 
 **Internal:**
-- **Remote Config Endpoint:** Added a `/remote-config` endpoint so the Remote UI can read the active language from the app config.
-- **yt-dlp Error Detail Capture:** Download failures now include the last stderr lines from `yt-dlp` instead of only returning an exit code.
-- **Translation Catalog Expansion:** Added new German, English, and Polish strings for notifications, Remote UI, and download error diagnosis.
-- **Unified Version Bump:** Synchronized all package version tags to `2.3.13` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
+- **Unified Version Bump:** Synchronized all project version identifiers to `2.3.15` across metadata, configs, Cargo, and UI badges.
+
+---
+
+----------------------------**V2.3.14**----------------------------
+
+**New Features:**
+- **Cross-Platform Tool Installation:** FFmpeg, yt-dlp, and the PO-Token-Provider setup now have automatic install paths outside Windows.
+- **Linux Package Manager Detection:** Linux installs now detect `apt-get`, `dnf`, `pacman`, or `zypper` and use the matching package manager for supported tools.
+- **macOS Homebrew Support:** macOS installs now use Homebrew for FFmpeg, yt-dlp, Node.js, curl, and Python when needed.
+- **Linux/macOS PO-Token Provider Setup:** Added a shell-based PO-Token-Provider setup flow for Linux and macOS, including plugin download, provider source setup, `npm install`, and TypeScript build.
+
+**Bug Fixes & UX Improvements:**
+- **Stable Parallel Download UI:** SoundSync still downloads up to 3 tracks at the same time, but the UI no longer jumps between active tracks on every progress update.
+- **Multiple Active Track Cards:** Parallel downloads can now stay highlighted at the same time in the downloaded track list.
+- **Better Total Progress Calculation:** The total progress bar now uses all active parallel downloads instead of only the latest progress event.
+- **Linux/macOS Filename Handling:** `yt-dlp` now only receives `--windows-filenames` on Windows, so Linux/macOS downloads no longer use unnecessary Windows filename restrictions.
+
+**Internal:**
+- **Per-Track Progress Tracking:** Added internal progress tracking per active download so parallel jobs can be represented correctly.
+- **Platform-Aware Installer Helpers:** Added reusable installer helpers for Linux/macOS command detection and shell execution.
+- **Windows-Only yt-dlp Filename Flag:** Moved `--windows-filenames` behind a Windows-only platform guard.
+- **Unified Version Bump:** Synchronized all package version tags to `2.3.14` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
 ---
 

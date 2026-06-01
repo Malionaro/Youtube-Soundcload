@@ -13,6 +13,50 @@ const DISCORD_CLIENT_ID: &str = "1510224184335405118";
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+#[cfg(not(target_os = "windows"))]
+fn command_exists(name: &str) -> bool {
+    Command::new("sh")
+        .args(["-c", &format!("command -v {} >/dev/null 2>&1", name)])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_install_command(package: &str) -> Result<Vec<String>, String> {
+    let candidates: [(&str, Vec<&str>); 4] = [
+        ("apt-get", vec!["sudo", "apt-get", "install", "-y", package]),
+        ("dnf", vec!["sudo", "dnf", "install", "-y", package]),
+        ("pacman", vec!["sudo", "pacman", "-S", "--noconfirm", package]),
+        ("zypper", vec!["sudo", "zypper", "--non-interactive", "install", package]),
+    ];
+
+    for (bin, args) in candidates {
+        if command_exists(bin) {
+            return Ok(args.into_iter().map(String::from).collect());
+        }
+    }
+
+    Err("No supported Linux package manager found. Supported: apt-get, dnf, pacman, zypper.".to_string())
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn run_shell_install(label: &str, command: &str) -> Result<String, String> {
+    let output = Command::new("sh")
+        .args(["-c", command])
+        .output()
+        .map_err(|e| format!("Failed to start installer for {}: {}", label, e))?;
+
+    let output_text = command_output_text(&output);
+    if output.status.success() {
+        Ok(format!("{} installed successfully.\n{}", label, output_text).trim().to_string())
+    } else if output_text.trim().is_empty() {
+        Err(format!("{} installation failed with exit code {:?}.", label, output.status.code()))
+    } else {
+        Err(format!("{} installation failed.\n{}", label, output_text))
+    }
+}
+
 #[tauri::command]
 pub fn load_config(state: State<AppState>) -> Result<AppConfig, String> {
     let config_path = get_config_path();
@@ -264,10 +308,11 @@ pub async fn get_playlist_info(
         "--no-warnings".to_string(),
         "-i".to_string(),
         "--no-color".to_string(),
-        "--windows-filenames".to_string(),
         "--extractor-args".to_string(),
         "youtube:player_client=android".to_string(),
     ];
+    #[cfg(target_os = "windows")]
+    args.push("--windows-filenames".to_string());
 
     if let Some(ref cp) = cookies_path {
         if !cp.is_empty() && std::path::Path::new(cp).exists() {
@@ -453,7 +498,6 @@ pub async fn download_track(
         "--newline".to_string(),
         "--no-color".to_string(),
         "--progress".to_string(),
-        "--windows-filenames".to_string(),
         "-o".to_string(),
         format!("{}/%(title)s.%(ext)s", folder),
         "--extractor-args".to_string(),
@@ -461,6 +505,8 @@ pub async fn download_track(
         "--postprocessor-args".to_string(),
         "ffmpeg:-threads 0".to_string(),
     ];
+    #[cfg(target_os = "windows")]
+    args.push("--windows-filenames".to_string());
 
     if is_audio {
         let codec = match format.as_str() {
@@ -947,16 +993,8 @@ pub async fn install_ffmpeg() -> Result<String, String> {
 
     #[cfg(target_os = "linux")]
     {
-        let output = Command::new("sudo")
-            .args(["apt-get", "install", "-y", "ffmpeg"])
-            .output()
-            .map_err(|e| format!("Failed: {}", e))?;
-
-        if output.status.success() {
-            Ok("FFmpeg installed successfully".to_string())
-        } else {
-            Err(String::from_utf8_lossy(&output.stderr).to_string())
-        }
+        let command = linux_install_command("ffmpeg")?.join(" ");
+        run_shell_install("FFmpeg", &command)
     }
 
     #[cfg(target_os = "macos")]
@@ -1006,9 +1044,28 @@ pub async fn install_ytdlp() -> Result<String, String> {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
-        Err("Auto-install for yt-dlp is currently only supported on Windows".to_string())
+        let command = if command_exists("pipx") {
+            "pipx install yt-dlp || pipx upgrade yt-dlp".to_string()
+        } else if command_exists("python3") {
+            "python3 -m pip install --user -U yt-dlp".to_string()
+        } else {
+            linux_install_command("yt-dlp")?.join(" ")
+        };
+        run_shell_install("yt-dlp", &command)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let command = if command_exists("brew") {
+            "brew install yt-dlp || brew upgrade yt-dlp".to_string()
+        } else if command_exists("python3") {
+            "python3 -m pip install --user -U yt-dlp".to_string()
+        } else {
+            return Err("Homebrew or python3 is required to install yt-dlp automatically on macOS.".to_string());
+        };
+        run_shell_install("yt-dlp", &command)
     }
 }
 
@@ -1197,9 +1254,83 @@ exit $proc.ExitCode
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        Err("Auto-Setup für PO-Token-Provider ist derzeit nur unter Windows unterstützt.".to_string())
+        let bootstrap = if cfg!(target_os = "linux") {
+            r#"
+if ! command -v curl >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y curl
+  elif command -v dnf >/dev/null 2>&1; then sudo dnf install -y curl
+  elif command -v pacman >/dev/null 2>&1; then sudo pacman -S --noconfirm curl
+  elif command -v zypper >/dev/null 2>&1; then sudo zypper --non-interactive install curl
+  fi
+fi
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then sudo apt-get install -y nodejs npm python3
+  elif command -v dnf >/dev/null 2>&1; then sudo dnf install -y nodejs npm python3
+  elif command -v pacman >/dev/null 2>&1; then sudo pacman -S --noconfirm nodejs npm python
+  elif command -v zypper >/dev/null 2>&1; then sudo zypper --non-interactive install nodejs npm python3
+  fi
+fi
+"#
+        } else {
+            r#"
+if ! command -v brew >/dev/null 2>&1; then
+  echo "Homebrew is required for automatic Node.js setup on macOS." >&2
+  exit 1
+fi
+if ! command -v curl >/dev/null 2>&1; then brew install curl; fi
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then brew install node; fi
+if ! command -v python3 >/dev/null 2>&1; then brew install python; fi
+"#
+        };
+
+        let script = format!(
+            r#"set -e
+{bootstrap}
+if ! command -v curl >/dev/null 2>&1; then echo "curl is required." >&2; exit 1; fi
+if ! command -v node >/dev/null 2>&1; then echo "Node.js is required." >&2; exit 1; fi
+if ! command -v npm >/dev/null 2>&1; then echo "npm is required." >&2; exit 1; fi
+if ! command -v python3 >/dev/null 2>&1; then echo "python3 is required." >&2; exit 1; fi
+
+CONFIG_HOME="${{XDG_CONFIG_HOME:-$HOME/.config}}"
+DATA_HOME="${{XDG_DATA_HOME:-$HOME/.local/share}}"
+PLUGIN_DIR="$CONFIG_HOME/yt-dlp/plugins"
+PROVIDER_DIR="$DATA_HOME/soundsync/bgutil-ytdlp-pot-provider"
+TMP_ROOT="$(mktemp -d)"
+mkdir -p "$PLUGIN_DIR" "$DATA_HOME/soundsync"
+
+TAG="$(curl -fsSL https://api.github.com/repos/Brainicism/bgutil-ytdlp-pot-provider/releases/latest | node -e "let data='';process.stdin.on('data',c=>data+=c);process.stdin.on('end',()=>console.log(JSON.parse(data).tag_name||''));")"
+if [ -z "$TAG" ]; then echo "Could not detect latest bgutil release." >&2; exit 1; fi
+
+echo "Downloading yt-dlp bgutil plugin $TAG..."
+curl -fL "https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/latest/download/bgutil-ytdlp-pot-provider.zip" -o "$PLUGIN_DIR/bgutil-ytdlp-pot-provider.zip"
+
+echo "Downloading provider source $TAG..."
+curl -fL "https://github.com/Brainicism/bgutil-ytdlp-pot-provider/archive/refs/tags/$TAG.zip" -o "$TMP_ROOT/source.zip"
+python3 - "$TMP_ROOT/source.zip" "$TMP_ROOT" <<'PY'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    z.extractall(sys.argv[2])
+PY
+
+rm -rf "$PROVIDER_DIR"
+EXTRACTED="$(find "$TMP_ROOT" -maxdepth 1 -type d -name 'bgutil-ytdlp-pot-provider-*' | head -n 1)"
+if [ -z "$EXTRACTED" ]; then echo "Provider source could not be extracted." >&2; exit 1; fi
+mv "$EXTRACTED" "$PROVIDER_DIR"
+
+echo "Installing provider dependencies..."
+cd "$PROVIDER_DIR/server"
+npm install
+npx tsc
+
+test -f "$PROVIDER_DIR/server/build/generate_once.js"
+rm -rf "$TMP_ROOT"
+echo "PO-Token-Provider setup completed."
+"#
+        );
+
+        run_shell_install("PO-Token-Provider", &script)
     }
 }
 
@@ -1286,6 +1417,8 @@ pub async fn download_and_install_update(
                 .map_err(|e| format!("Failed to start installer: {}", e))?;
         }
     }
+    #[cfg(not(target_os = "windows"))]
+    let _ = client;
 
     // Exit the app after a short delay so the installer can replace the files
     let handle = app.clone();
@@ -1333,5 +1466,7 @@ pub fn execute_after_download_action(action: String) -> Result<(), String> {
             _ => {}
         }
     }
+    #[cfg(not(target_os = "windows"))]
+    let _ = action;
     Ok(())
 }

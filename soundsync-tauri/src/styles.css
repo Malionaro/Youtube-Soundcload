@@ -165,7 +165,7 @@ body {
 .language-select {
   background: var(--bg-input); color: var(--text-primary);
   border: 1px solid var(--border); border-radius: var(--radius-xs);
-  padding: 6px 30px 6px 10px; font-size: 13px; font-family: var(--font);
+  height: 38px; padding: 0 30px 0 10px; line-height: 36px; font-size: 13px; font-family: var(--font);
   cursor: pointer; transition: all var(--transition);
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'%3E%3C/path%3E%3C/svg%3E");
@@ -513,6 +513,7 @@ input:checked + .toggle-track::after {
 
 .input-row { display: flex; gap: 8px; align-items: center; width: 100%; }
 .input-row .text-input { flex: 1; min-width: 0; }
+.input-row .icon-btn { width: 44px; height: 44px; }
 
 .input-wrapper { position: relative; flex: 1; }
 
@@ -547,9 +548,10 @@ input:checked + .toggle-track::after {
 .clear-btn:hover { color: var(--danger); transform: translateY(-50%) scale(1.1); }
 
 .select-input {
-  padding: 10px 34px 10px 14px; background: var(--bg-input); color: var(--text-primary);
+  width: auto; height: 44px; padding: 0 34px 0 14px; background: var(--bg-input); color: var(--text-primary);
   border: 1px solid var(--border); border-radius: var(--radius-xs);
   font-family: var(--font); font-size: 13px;
+  line-height: 42px;
   cursor: pointer; transition: all var(--transition); outline: none;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'%3E%3C/path%3E%3C/svg%3E");
@@ -574,6 +576,8 @@ input:checked + .toggle-track::after {
 @supports (appearance: base-select) {
   .select-input, .language-select {
     appearance: base-select;
+    background-image: none !important;
+    padding-right: 14px !important;
   }
   
   select::select-fallback,
@@ -806,11 +810,11 @@ input:checked + .toggle-track::after {
 }
 
 .btn-lg { padding: 12px 24px; font-size: 14px; }
-.btn-small { padding: 6px 12px; font-size: 11px; }
+.btn-small { height: 36px; padding: 0 12px; font-size: 11px; }
 .btn-full { width: 100%; }
 
 .button-row { display: flex; gap: 10px; padding: 12px 16px; flex-wrap: wrap; }
-.button-row .btn { flex: 1; min-width: 140px; }
+.button-row .btn { flex: 1 1 0px; min-width: 140px; }
 
 /* ═══ Progress ═══ */
 .progress-section { display: flex; flex-direction: column; gap: 12px; }

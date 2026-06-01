@@ -36,6 +36,7 @@ pub fn run() {
             let icon = tauri::image::Image::from_bytes(icon_bytes)?;
             let tray_menu = MenuBuilder::new(app)
                 .text("show_ui", "UI öffnen")
+                .text("open_folder", "Download-Ordner öffnen")
                 .separator()
                 .text("quit", "Beenden")
                 .build()?;
@@ -49,6 +50,16 @@ pub fn run() {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
+                        }
+                    }
+                    "open_folder" => {
+                        let folder_path = {
+                            let state = app.state::<AppState>();
+                            let config = state.config.lock().unwrap();
+                            config.download_folder.clone()
+                        };
+                        if !folder_path.is_empty() {
+                            let _ = open_folder(folder_path);
                         }
                     }
                     "quit" => {
