@@ -8,10 +8,12 @@ use std::sync::{Arc, Mutex};
 pub struct AppState {
     pub is_downloading: Mutex<bool>,
     pub abort_flag: Mutex<bool>,
+    pub pause_flag: Mutex<bool>,
     pub active_download_pids: Arc<Mutex<Vec<u32>>>,
     pub config: Mutex<AppConfig>,
     pub discord_client: Mutex<Option<DiscordClient>>,
     pub current_progress: Mutex<Option<DownloadProgress>>,
+    pub remote_queue: Mutex<Vec<RemoteQueueItem>>,
 }
 
 pub struct DiscordClient {
@@ -100,6 +102,16 @@ pub struct RemotePayload {
     pub format: Option<String>,
     #[serde(rename = "autoStart")]
     pub auto_start: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteQueueItem {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub source: String,
+    pub status: String,
+    pub added_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2039,6 +2039,15 @@ body.tv-mode *:focus {
   margin-bottom: 4px;
 }
 
+.queue-tools-card {
+  padding: 12px 20px;
+  margin-bottom: 10px;
+}
+
+.queue-tools-card .select-input {
+  max-width: 190px;
+}
+
 .queue-results-container {
   flex: 1;
   display: flex;
@@ -2108,10 +2117,30 @@ body.tv-mode *:focus {
   border-color: rgba(255, 85, 0, 0.15);
 }
 
+.queue-card-source.spotify {
+  color: #1db954;
+  background: rgba(29, 185, 84, 0.08);
+  border-color: rgba(29, 185, 84, 0.15);
+}
+
+.queue-card-source.apple-music {
+  color: #fa2d48;
+  background: rgba(250, 45, 72, 0.08);
+  border-color: rgba(250, 45, 72, 0.15);
+}
+
 .queue-card-source.extension {
   color: var(--primary);
   background: rgba(0, 225, 186, 0.08);
   border-color: rgba(0, 225, 186, 0.15);
+}
+
+.queue-card.status-error {
+  border-color: rgba(255, 94, 87, 0.35);
+}
+
+.queue-card.status-done {
+  border-color: rgba(39, 201, 63, 0.25);
 }
 
 .queue-card-info {
@@ -2155,6 +2184,39 @@ body.tv-mode *:focus {
   text-overflow: ellipsis;
   padding-left: 6px;
 }
+
+.queue-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.queue-source-badge,
+.queue-status-badge {
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  background: var(--bg-hover);
+}
+
+.queue-source-badge.youtube { color: #ff4b4b; }
+.queue-source-badge.soundcloud { color: #ff7a2f; }
+.queue-source-badge.spotify { color: #1db954; }
+.queue-source-badge.apple-music { color: #fa2d48; }
+
+.queue-status-badge.queued { color: var(--text-muted); }
+.queue-status-badge.downloading { color: var(--accent); }
+.queue-status-badge.done { color: var(--success); }
+.queue-status-badge.error { color: var(--danger); }
 
 .queue-card-actions {
   display: flex;

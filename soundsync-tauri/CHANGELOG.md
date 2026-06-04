@@ -1,3 +1,33 @@
+----------------------------**V2.3.16**----------------------------
+
+**New Features:**
+- **Download Pause & Resume:** Added a dedicated Pause/Resume control next to the main download actions so active downloads can be temporarily stopped and continued later.
+- **Real Process Suspension:** Pause now suspends the running download process tree instead of only changing the UI state.
+- **Cross-Platform Resume Support:** Resume support is wired for Windows, Linux, and macOS using platform-specific process controls.
+- **Persistent Clipboard Queue:** The Sammelkorb now saves and restores queued links across app restarts.
+- **Queue Search & Sorting:** Added a Sammelkorb search field and sorting by name, source, added date, and status for large playlists.
+- **Remote Queue View:** SoundSync Remote can now display the current Sammelkorb on mobile through a new queue endpoint.
+- **Queue Retry Flow:** Added a retry action for failed queue items so broken downloads can be attempted again without rebuilding the queue.
+
+**Bug Fixes & UI/UX Improvements:**
+- **Pause/Resume Button State:** The new action button switches between `Pausieren` and `Fortsetzen` and updates its icon based on the current download state.
+- **Localized Pause Logs:** Pause and resume status messages are translated in German, English, and Polish.
+- **Cancel Reset Safety:** Cancelling a download now also clears the paused state so the next download starts normally.
+- **Better Duplicate Handling:** Duplicate queue links now offer skip, replace, or add-anyway behavior instead of silently ignoring the link.
+- **Queue Source Badges:** Queue entries now show source badges for YouTube, SoundCloud, Spotify, Apple Music, and other supported links.
+- **Queue Status Badges:** Queue entries now show whether they are queued, downloading, completed, or failed.
+
+**Internal:**
+- **New Download State Flag:** Added a backend pause flag to the shared app state.
+- **New Tauri Commands:** Added `pause_download` and `resume_download` commands and registered them in the Tauri invoke handler.
+- **Platform Process Controls:** Windows uses PowerShell `Suspend-Process`/`Resume-Process`; Linux and macOS use `SIGSTOP`/`SIGCONT`.
+- **Remote Queue State:** Added shared backend queue state and an `update_remote_queue` command so the frontend can mirror the Sammelkorb to the Remote server.
+- **Queue API Endpoint:** Added `/queue` to the Remote server for mobile queue visibility.
+- **Queue Data Model Expansion:** Queue items now track IDs, source type, status, and creation time.
+- **Unified Version Bump:** Synchronized all project version identifiers to `2.3.16` across metadata, configs, Cargo, package lock, and UI badges.
+
+---
+
 ----------------------------**V2.3.15**----------------------------
 
 **New Features:**
@@ -14,31 +44,37 @@
 **Internal:**
 - **Unified Version Bump:** Synchronized all project version identifiers to `2.3.15` across metadata, configs, Cargo, and UI badges.
 
+
 ---
+
+----------------------**V2.3.15**----------------------------
 
 ----------------------------**V2.3.14**----------------------------
 
 **New Features:**
+
 - **Cross-Platform Tool Installation:** FFmpeg, yt-dlp, and the PO-Token-Provider setup now have automatic install paths outside Windows.
 - **Linux Package Manager Detection:** Linux installs now detect `apt-get`, `dnf`, `pacman`, or `zypper` and use the matching package manager for supported tools.
 - **macOS Homebrew Support:** macOS installs now use Homebrew for FFmpeg, yt-dlp, Node.js, curl, and Python when needed.
 - **Linux/macOS PO-Token Provider Setup:** Added a shell-based PO-Token-Provider setup flow for Linux and macOS, including plugin download, provider source setup, `npm install`, and TypeScript build.
 
 **Bug Fixes & UX Improvements:**
+
 - **Stable Parallel Download UI:** SoundSync still downloads up to 3 tracks at the same time, but the UI no longer jumps between active tracks on every progress update.
 - **Multiple Active Track Cards:** Parallel downloads can now stay highlighted at the same time in the downloaded track list.
 - **Better Total Progress Calculation:** The total progress bar now uses all active parallel downloads instead of only the latest progress event.
 - **Linux/macOS Filename Handling:** `yt-dlp` now only receives `--windows-filenames` on Windows, so Linux/macOS downloads no longer use unnecessary Windows filename restrictions.
 
 **Internal:**
+
 - **Per-Track Progress Tracking:** Added internal progress tracking per active download so parallel jobs can be represented correctly.
 - **Platform-Aware Installer Helpers:** Added reusable installer helpers for Linux/macOS command detection and shell execution.
 - **Windows-Only yt-dlp Filename Flag:** Moved `--windows-filenames` behind a Windows-only platform guard.
 - **Unified Version Bump:** Synchronized all package version tags to `2.3.14` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
----
+----------------------------**V2.3.14**----------------------------
 
--------------------------**V2.3.12**----------------------------
+----------------------------**V2.3.12**----------------------------
 
 **New Features:**
 
@@ -55,9 +91,7 @@
 - **Conversion Translation Keys:** Added localized `files_selected` text for German, English, and Polish.
 - **Unified Version Bump:** Synchronized all package version tags to `2.3.12` across `package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and the visible app UI.
 
----
-
--------------------**V2.3.12**----------------------------
+----------------------------**V2.3.12**----------------------------
 
 ----------------------------**V2.3.11**----------------------------
 

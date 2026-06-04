@@ -88,6 +88,13 @@ pub fn save_config(state: State<AppState>, config: AppConfig) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn update_remote_queue(state: State<AppState>, queue: Vec<RemoteQueueItem>) -> Result<(), String> {
+    let mut remote_queue = state.remote_queue.lock().unwrap();
+    *remote_queue = queue;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn read_clipboard_text() -> Result<String, String> {
     let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
     clipboard.get_text().map_err(|e| e.to_string())
@@ -458,6 +465,8 @@ pub async fn get_trending_videos() -> Result<PlaylistInfo, String> {
 pub async fn reset_download_cancel(state: State<'_, AppState>) -> Result<(), String> {
     let mut abort = state.abort_flag.lock().unwrap();
     *abort = false;
+    let mut paused = state.pause_flag.lock().unwrap();
+    *paused = false;
     let mut downloading = state.is_downloading.lock().unwrap();
     *downloading = true;
     Ok(())
@@ -803,6 +812,8 @@ pub async fn download_track(
 pub async fn cancel_download(state: State<'_, AppState>) -> Result<(), String> {
     let mut abort = state.abort_flag.lock().unwrap();
     *abort = true;
+    let mut paused = state.pause_flag.lock().unwrap();
+    *paused = false;
     let mut downloading = state.is_downloading.lock().unwrap();
     *downloading = false;
 
@@ -818,6 +829,105 @@ pub async fn cancel_download(state: State<'_, AppState>) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn set_download_process_paused(pid: u32, paused: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let command = if paused { "Suspend-Process" } else { "Resume-Process" };
+        let script = format!(
+            r#"
+function Set-ProcessTreeState([int]$Id) {{
+  Get-CimInstance Win32_Process -Filter "ParentProcessId=$Id" | ForEach-Object {{
+    Set-ProcessTreeState ([int]$_.ProcessId)
+  }}
+  {command} -Id $Id -ErrorAction Stop
+}}
+Set-ProcessTreeState {pid}
+"#
+        );
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-NoProfile", "-Command", &script])
+            .creation_flags(0x08000000);
+        let output = cmd
+            .output()
+            .map_err(|e| format!("PowerShell konnte nicht gestartet werden: {}", e))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(command_output_text(&output))
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let signal = if paused { "-STOP" } else { "-CONT" };
+        let script = format!(
+            "pkill {signal} -P {pid} 2>/dev/null || true; kill {signal} {pid}"
+        );
+        let output = Command::new("sh")
+            .args(["-c", &script])
+            .output()
+            .map_err(|e| format!("pause/resume command could not be started: {}", e))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(command_output_text(&output))
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn pause_download(state: State<'_, AppState>) -> Result<(), String> {
+    {
+        let downloading = state.is_downloading.lock().unwrap();
+        if !*downloading {
+            return Err("No active download to pause.".to_string());
+        }
+    }
+
+    let pids = state.active_download_pids.lock().unwrap().clone();
+    if pids.is_empty() {
+        return Err("No active download process to pause.".to_string());
+    }
+
+    let mut errors = Vec::new();
+    for pid in pids {
+        if let Err(e) = set_download_process_paused(pid, true) {
+            errors.push(format!("PID {pid}: {e}"));
+        }
+    }
+
+    if errors.is_empty() {
+        let mut paused = state.pause_flag.lock().unwrap();
+        *paused = true;
+        Ok(())
+    } else {
+        Err(errors.join("\n"))
+    }
+}
+
+#[tauri::command]
+pub async fn resume_download(state: State<'_, AppState>) -> Result<(), String> {
+    let pids = state.active_download_pids.lock().unwrap().clone();
+    if pids.is_empty() {
+        return Err("No paused download process to resume.".to_string());
+    }
+
+    let mut errors = Vec::new();
+    for pid in pids {
+        if let Err(e) = set_download_process_paused(pid, false) {
+            errors.push(format!("PID {pid}: {e}"));
+        }
+    }
+
+    if errors.is_empty() {
+        let mut paused = state.pause_flag.lock().unwrap();
+        *paused = false;
+        Ok(())
+    } else {
+        Err(errors.join("\n"))
+    }
 }
 
 #[tauri::command]

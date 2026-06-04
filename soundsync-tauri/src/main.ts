@@ -158,14 +158,23 @@ let isTvMode = false;
 let currentTranslations: Record<string, string> = {};
 let notificationActionListenerReady = false;
 let trackProgressByIndex = new Map<number, number>();
+let isDownloadPaused = false;
 
 let isBatchQueueMode = false;
 interface QueueItem {
+  id: string;
   url: string;
   title: string;
   source: "clipboard" | "extension" | "manual";
+  sourceType: "youtube" | "soundcloud" | "spotify" | "apple_music" | "other";
+  status: "queued" | "downloading" | "done" | "error";
+  addedAt: number;
 }
 let clipboardQueue: QueueItem[] = [];
+let queueSearchInput: HTMLInputElement;
+let queueSortSelect: HTMLSelectElement;
+let queueRetryFailedBtn: HTMLButtonElement;
+const QUEUE_STORAGE_KEY = "soundsync_clipboard_queue_v2";
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
 const $ = (id: string) => (document.getElementById(id) || document.createElement("div")) as HTMLElement;
@@ -183,6 +192,7 @@ let audioQualities: HTMLElement;
 let videoQualities: HTMLElement;
 let downloadBtn: HTMLButtonElement;
 let cancelBtn: HTMLButtonElement;
+let pauseResumeBtn: HTMLButtonElement;
 let logOutput: HTMLElement;
 let trackList: HTMLElement;
 let downloadProgress: HTMLElement;
@@ -207,6 +217,7 @@ function setupElements() {
     videoQualities = getEl("video-qualities");
     downloadBtn = getEl("download-btn");
     cancelBtn = getEl("cancel-btn");
+    pauseResumeBtn = getEl("pause-resume-btn");
     logOutput = getEl("log-output");
     trackList = getEl("track-list");
     downloadProgress = getEl("download-progress");
@@ -219,6 +230,9 @@ function setupElements() {
     queueManualAddBtn = getEl("queue-manual-add-btn") as HTMLButtonElement;
     queueDownloadAllBtn = getEl("queue-download-all-btn") as HTMLButtonElement;
     queueClearAllBtn = getEl("queue-clear-all-btn") as HTMLButtonElement;
+    queueSearchInput = getEl("queue-search-input") as HTMLInputElement;
+    queueSortSelect = getEl("queue-sort-select") as HTMLSelectElement;
+    queueRetryFailedBtn = getEl("queue-retry-failed-btn") as HTMLButtonElement;
   } catch (e) {
     console.error("Kritischer Fehler: Wichtige UI-Elemente fehlen!", e);
   }
@@ -325,6 +339,7 @@ async function init() {
     
     updateQualityOptions();
     if (config.quality) qualitySelect.value = config.quality;
+    loadQueue();
 
     // Apply defaults for new settings
     if (config.auto_scroll_log === undefined) config.auto_scroll_log = true;
@@ -359,6 +374,8 @@ async function init() {
   setupEventListeners();
   setupTauriListeners();
   setupTabs();
+  renderQueue();
+  void syncRemoteQueue();
   checkSystem();
   log(`🎵 SoundSync Downloader v${appVersion} ready`, "success");
   
@@ -606,6 +623,7 @@ function updateUI() {
   cookiesInput.placeholder = _("cookies_placeholder");
   $("download-btn-text").textContent = _("start_download");
   $("cancel-btn-text").textContent = _("cancel");
+  $("pause-resume-btn-text").textContent = isDownloadPaused ? _("resume_download") : _("pause_download");
   $("convert-btn-text").textContent = _("convert_file");
   $("browse-btn").textContent = _("browse");
   $("cookies-btn").textContent = _("select");
@@ -766,6 +784,9 @@ function setupEventListeners() {
   on("detected-url-dismiss", "click", hideDetectedUrlPrompt);
 
   on("queue-manual-input", "input", checkPlaylistUrlInput);
+  on("queue-search-input", "input", renderQueue);
+  on("queue-sort-select", "change", renderQueue);
+  on("queue-retry-failed-btn", "click", retryFailedQueueItems);
 
   on("queue-manual-add-btn", "click", async () => {
     const url = queueManualInput.value.trim();
@@ -850,6 +871,7 @@ function setupEventListeners() {
   // Download
   if (downloadBtn) downloadBtn.addEventListener("click", startDownload);
   if (cancelBtn) cancelBtn.addEventListener("click", cancelDownload);
+  if (pauseResumeBtn) pauseResumeBtn.addEventListener("click", toggleDownloadPause);
 
   // Clear log
   on("clear-log-btn", "click", () => {
@@ -1481,9 +1503,21 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
   }
 
   // Check duplicate
-  if (clipboardQueue.some(item => item.url === url)) {
-    logKey("log_link_already_queued", "info", { url });
-    return;
+  const duplicateIndex = clipboardQueue.findIndex(item => item.url === url);
+  if (duplicateIndex !== -1) {
+    const choice = window.prompt(
+      `${_("duplicate_queue_prompt")}\n\nskip = ${_("duplicate_skip")}\nreplace = ${_("duplicate_replace")}\nadd = ${_("duplicate_add")}`,
+      "skip"
+    )?.trim().toLowerCase();
+    if (!choice || choice === "skip") {
+      logKey("log_link_already_queued", "info", { url });
+      return;
+    }
+    if (choice === "replace") {
+      clipboardQueue.splice(duplicateIndex, 1);
+    } else if (choice !== "add") {
+      return;
+    }
   }
 
   // Deduce a nice placeholder title
@@ -1496,6 +1530,10 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
         inferredTitle = "YouTube Video / Musik";
       } else if (host.includes("soundcloud.com")) {
         inferredTitle = "SoundCloud Track";
+      } else if (host.includes("spotify.com")) {
+        inferredTitle = "Spotify Link";
+      } else if (host.includes("music.apple.com")) {
+        inferredTitle = "Apple Music Link";
       } else {
         inferredTitle = "Anderer Musik-Link";
       }
@@ -1504,7 +1542,15 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
     }
   }
 
-  clipboardQueue.push({ url, title: inferredTitle, source });
+  clipboardQueue.push({
+    id: createQueueId(),
+    url,
+    title: inferredTitle,
+    source,
+    sourceType: detectQueueSourceType(url),
+    status: "queued",
+    addedAt: Date.now(),
+  });
   logKey("log_link_added_queue", "success", { title: inferredTitle });
   
   // Play dynamic scale animation on queue badge
@@ -1518,11 +1564,14 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
     queueBadge.style.animation = "badgePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards";
   }
 
+  saveQueue();
   renderQueue();
 }
 
 function renderQueue() {
   if (!queueList) return;
+
+  const visibleItems = getVisibleQueueItems();
 
   if (clipboardQueue.length === 0) {
     queueList.innerHTML = `
@@ -1539,6 +1588,7 @@ function renderQueue() {
     
     queueDownloadAllBtn.disabled = true;
     queueClearAllBtn.disabled = true;
+    if (queueRetryFailedBtn) queueRetryFailedBtn.disabled = true;
     if (queueBadge) {
       queueBadge.style.display = "none";
     }
@@ -1547,31 +1597,45 @@ function renderQueue() {
 
   queueDownloadAllBtn.disabled = false;
   queueClearAllBtn.disabled = false;
+  if (queueRetryFailedBtn) queueRetryFailedBtn.disabled = !clipboardQueue.some(item => item.status === "error");
   
   if (queueBadge) {
     queueBadge.textContent = clipboardQueue.length.toString();
     queueBadge.style.display = "flex";
   }
 
+  if (visibleItems.length === 0) {
+    queueList.innerHTML = `<div class="empty-state"><p>${_("queue_no_results")}</p></div>`;
+    return;
+  }
+
   queueList.innerHTML = "";
-  clipboardQueue.forEach((item, idx) => {
+  visibleItems.forEach((item, idx) => {
+    const realIdx = clipboardQueue.findIndex(queueItem => queueItem.id === item.id);
     const card = document.createElement("div");
-    card.className = "queue-card";
+    card.className = `queue-card status-${item.status}`;
     card.style.animationDelay = `${idx * 0.05}s`;
 
-    // Deduce source icon and class
-    let sourceClass = "accent";
+    let sourceClass: string = item.sourceType;
+    let sourceLabel = _("source_other");
     let sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
     
-    if (item.url.includes("youtube.com") || item.url.includes("youtu.be")) {
+    if (item.sourceType === "youtube") {
       sourceClass = "youtube";
+      sourceLabel = "YouTube";
       sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25a29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg>`;
-    } else if (item.url.includes("soundcloud.com")) {
+    } else if (item.sourceType === "soundcloud") {
       sourceClass = "soundcloud";
+      sourceLabel = "SoundCloud";
       sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h.79a4.5 4.5 0 1 1 1 8.89Z"/></svg>`;
-    } else if (item.source === "extension") {
-      sourceClass = "extension";
-      sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>`;
+    } else if (item.sourceType === "spotify") {
+      sourceClass = "spotify";
+      sourceLabel = "Spotify";
+      sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 10c2.7-.8 5.3-.6 8 .8"/><path d="M8.7 13c2-.5 4-.4 6.1.6"/><path d="M9.4 15.8c1.4-.3 2.8-.2 4.3.4"/></svg>`;
+    } else if (item.sourceType === "apple_music") {
+      sourceClass = "apple-music";
+      sourceLabel = "Apple Music";
+      sourceIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>`;
     }
 
     card.innerHTML = `
@@ -1580,10 +1644,15 @@ function renderQueue() {
       </div>
       <div class="queue-card-info">
          <input type="text" class="queue-card-title-input" value="${escapeHtml(item.title)}" placeholder="Titel bearbeiten..." />
+         <div class="queue-card-meta">
+            <span class="queue-source-badge ${sourceClass}">${sourceLabel}</span>
+            <span class="queue-status-badge ${item.status}">${_("queue_status_" + item.status)}</span>
+            <span>${new Date(item.addedAt).toLocaleString()}</span>
+         </div>
          <span class="queue-card-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</span>
       </div>
       <div class="queue-card-actions">
-         <button class="queue-card-remove" title="Aus Korb löschen" data-idx="${idx}">
+         <button class="queue-card-remove" title="Aus Korb löschen" data-idx="${realIdx}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
          </button>
       </div>
@@ -1593,12 +1662,14 @@ function renderQueue() {
     const titleInput = card.querySelector(".queue-card-title-input") as HTMLInputElement;
     titleInput.addEventListener("input", (e) => {
       item.title = (e.target as HTMLInputElement).value;
+      saveQueue();
     });
 
     // Handle single item deletion
     card.querySelector(".queue-card-remove")?.addEventListener("click", () => {
-      clipboardQueue.splice(idx, 1);
+      if (realIdx >= 0) clipboardQueue.splice(realIdx, 1);
       logKey("log_link_removed_queue", "info");
+      saveQueue();
       renderQueue();
     });
 
@@ -1609,6 +1680,7 @@ function renderQueue() {
 function clearQueue() {
   clipboardQueue = [];
   logKey("log_queue_cleared", "info");
+  saveQueue();
   renderQueue();
 }
 
@@ -1617,18 +1689,20 @@ function startBatchDownload() {
 
   logKey("log_batch_started", "info", { count: String(clipboardQueue.length) });
 
+  const itemsToDownload = clipboardQueue.filter(item => item.status === "queued" || item.status === "error");
+  if (itemsToDownload.length === 0) return;
+  itemsToDownload.forEach(item => item.status = "downloading");
+  saveQueue();
+  renderQueue();
+
   // Map to playlist entries
-  playlistEntries = clipboardQueue.map((item, idx) => ({
+  playlistEntries = itemsToDownload.map((item, idx) => ({
     title: item.title,
     url: item.url,
     thumbnail: null,
     duration: null,
     index: idx + 1
   }));
-
-  // Clear queue
-  clipboardQueue = [];
-  renderQueue();
 
   // Set mode flag and visual settings
   isBatchQueueMode = true;
@@ -1643,6 +1717,16 @@ function startBatchDownload() {
 
   // Trigger download process!
   startDownload();
+}
+
+function retryFailedQueueItems() {
+  const failed = clipboardQueue.filter(item => item.status === "error");
+  failed.forEach(item => item.status = "queued");
+  if (failed.length > 0) {
+    saveQueue();
+    renderQueue();
+    startBatchDownload();
+  }
 }
 
 function checkPlaylistUrlInput() {
@@ -1682,14 +1766,19 @@ async function importPlaylist(url: string, source: "clipboard" | "extension" | "
     for (const entry of playlistInfo.entries) {
       if (!clipboardQueue.some(item => item.url === entry.url)) {
         clipboardQueue.push({
+          id: createQueueId(),
           url: entry.url,
           title: entry.title,
-          source
+          source,
+          sourceType: detectQueueSourceType(entry.url),
+          status: "queued",
+          addedAt: Date.now() + count,
         });
         count++;
       }
     }
     renderQueue();
+    saveQueue();
     logKey("log_playlist_imported", "success", {
       count: String(count),
       total: String(playlistInfo.total),
@@ -1714,6 +1803,7 @@ async function startDownload() {
   const runId = ++downloadRunId;
 
   setDownloadUiState(true);
+  setDownloadPaused(false);
   completedTracks = 0;
   trackProgressByIndex = new Map();
   startTime = Date.now();
@@ -1800,9 +1890,33 @@ async function startDownload() {
             if (bar) { bar.style.width = "100%"; bar.style.background = "var(--success)"; }
             if (stat) stat.textContent = "✅";
           }
+          const queueItem = clipboardQueue.find(item => item.url === entry.url);
+          if (queueItem) {
+            queueItem.status = "done";
+            saveQueue();
+            renderQueue();
+          }
         } catch (e) {
           if (!isDownloading) return;
           logErrorDetails(e, entry.title);
+          const queueItem = clipboardQueue.find(item => item.url === entry.url);
+          if (queueItem) {
+            queueItem.status = "error";
+            saveQueue();
+            renderQueue();
+          } else {
+            clipboardQueue.push({
+              id: createQueueId(),
+              url: entry.url,
+              title: entry.title,
+              source: "manual",
+              sourceType: detectQueueSourceType(entry.url),
+              status: "error",
+              addedAt: Date.now(),
+            });
+            saveQueue();
+            renderQueue();
+          }
           if (card) {
             const bar = card.querySelector(".track-progress-bar") as HTMLElement;
             const stat = card.querySelector(".track-stat") as HTMLElement;
@@ -1853,11 +1967,97 @@ async function startDownload() {
   }
 }
 
+function createQueueId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function detectQueueSourceType(url: string): QueueItem["sourceType"] {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.includes("youtube.com") || host === "youtu.be") return "youtube";
+    if (host.includes("soundcloud.com")) return "soundcloud";
+    if (host.includes("spotify.com")) return "spotify";
+    if (host.includes("music.apple.com")) return "apple_music";
+  } catch {}
+  return "other";
+}
+
+function saveQueue() {
+  try {
+    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(clipboardQueue));
+  } catch (e) {
+    console.warn("Could not persist queue:", e);
+  }
+  void syncRemoteQueue();
+}
+
+function loadQueue() {
+  try {
+    const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+    if (!raw) return;
+    const loaded = JSON.parse(raw) as Partial<QueueItem>[];
+    clipboardQueue = loaded
+      .filter(item => item.url && item.title)
+      .map(item => ({
+        id: item.id || createQueueId(),
+        url: item.url!,
+        title: item.title!,
+        source: item.source || "manual",
+        sourceType: item.sourceType || detectQueueSourceType(item.url!),
+        status: item.status || "queued",
+        addedAt: item.addedAt || Date.now(),
+      }));
+  } catch (e) {
+    console.warn("Could not load queue:", e);
+    clipboardQueue = [];
+  }
+}
+
+async function syncRemoteQueue() {
+  try {
+    await invoke("update_remote_queue", {
+      queue: clipboardQueue.map(item => ({
+        id: item.id,
+        title: item.title,
+        url: item.url,
+        source: item.sourceType,
+        status: item.status,
+        added_at: item.addedAt,
+      })),
+    });
+  } catch {
+    // Remote server may not be ready yet; local queue persistence is still enough.
+  }
+}
+
+function getVisibleQueueItems(): QueueItem[] {
+  const query = (queueSearchInput?.value || "").trim().toLowerCase();
+  const sort = queueSortSelect?.value || "added_desc";
+  let items = clipboardQueue.map((item, index) => ({ item, index }));
+  if (query) {
+    items = items.filter(({ item }) =>
+      item.title.toLowerCase().includes(query) ||
+      item.url.toLowerCase().includes(query) ||
+      item.sourceType.toLowerCase().includes(query) ||
+      item.status.toLowerCase().includes(query)
+    );
+  }
+  items.sort((a, b) => {
+    if (sort === "added_asc") return a.item.addedAt - b.item.addedAt;
+    if (sort === "title_asc") return a.item.title.localeCompare(b.item.title);
+    if (sort === "source_asc") return a.item.sourceType.localeCompare(b.item.sourceType);
+    if (sort === "status_asc") return a.item.status.localeCompare(b.item.status);
+    return b.item.addedAt - a.item.addedAt;
+  });
+  return items.map(({ item }) => item);
+}
+
 async function cancelDownload() {
   downloadRunId++;
   
   // UI sofort zurücksetzen für besseres Feedback
   setDownloadUiState(false);
+  setDownloadPaused(false);
   
   downloadProgress.classList.remove("active");
   totalProgress.classList.remove("active");
@@ -1870,6 +2070,29 @@ async function cancelDownload() {
     await invoke("cancel_download");
   } catch (e) {
     log(`⚠️ ${e}`, "warning");
+  }
+}
+
+async function toggleDownloadPause() {
+  if (!isDownloading || !pauseResumeBtn) return;
+
+  pauseResumeBtn.disabled = true;
+  try {
+    if (isDownloadPaused) {
+      await invoke("resume_download");
+      setDownloadPaused(false);
+      setStatus(_("download_resumed"), "info");
+      log("▶ " + _("download_resumed"), "info");
+    } else {
+      await invoke("pause_download");
+      setDownloadPaused(true);
+      setStatus(_("download_paused"), "warning");
+      log("⏸ " + _("download_paused"), "warning");
+    }
+  } catch (e) {
+    log(`⚠️ ${e}`, "warning");
+  } finally {
+    pauseResumeBtn.disabled = !isDownloading;
   }
 }
 
@@ -2018,9 +2241,21 @@ function updateDownloadBtnState() {
 function setDownloadUiState(downloading: boolean) {
   isDownloading = downloading;
   cancelBtn.disabled = !downloading;
+  pauseResumeBtn.disabled = !downloading;
   formatSelect.disabled = downloading;
   (getEl("convert-btn") as HTMLButtonElement).disabled = downloading;
+  if (!downloading) setDownloadPaused(false);
   updateDownloadBtnState();
+}
+
+function setDownloadPaused(paused: boolean) {
+  isDownloadPaused = paused;
+  const text = maybeElement("pause-resume-btn-text");
+  const pauseIcon = maybeElement("pause-resume-icon-pause");
+  const playIcon = maybeElement("pause-resume-icon-play");
+  if (text) text.textContent = paused ? _("resume_download") : _("pause_download");
+  if (pauseIcon) pauseIcon.style.display = paused ? "none" : "";
+  if (playIcon) playIcon.style.display = paused ? "" : "none";
 }
 
 function resetProgress() {

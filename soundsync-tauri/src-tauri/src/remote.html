@@ -941,6 +941,10 @@
                     <span id="dl-eta-speed">--</span>
                 </div>
             </div>
+
+            <div class="file-list" id="remote-queue-list" style="margin-top: 20px;">
+                <p style="text-align: center; font-size: 13px; margin: 20px 0; color: var(--text-sub);" data-i18n="queue_loading">Lade Sammelkorb...</p>
+            </div>
         </div>
 
         <!-- LIBRARY PANEL -->
@@ -1050,6 +1054,8 @@
                 send_server_error: "Serverfehler beim Senden!",
                 send_connection_error: "Verbindungsfehler zum PC!",
                 delete_confirm: "Möchtest du \"{file}\" wirklich endgültig löschen?",
+                queue_loading: "Lade Sammelkorb...",
+                queue_empty: "Sammelkorb ist leer.",
                 eta: "ETA"
             },
             en: {
@@ -1079,6 +1085,8 @@
                 send_server_error: "Server error while sending!",
                 send_connection_error: "Connection error to PC!",
                 delete_confirm: "Do you really want to permanently delete \"{file}\"?",
+                queue_loading: "Loading queue...",
+                queue_empty: "Queue is empty.",
                 eta: "ETA"
             },
             pl: {
@@ -1108,6 +1116,8 @@
                 send_server_error: "Błąd serwera podczas wysyłania!",
                 send_connection_error: "Błąd połączenia z PC!",
                 delete_confirm: "Czy na pewno trwale usunąć \"{file}\"?",
+                queue_loading: "Ładowanie koszyka...",
+                queue_empty: "Koszyk jest pusty.",
                 eta: "ETA"
             }
         };
@@ -1247,6 +1257,7 @@
         // LIBRARY SYSTEM & AUDIO STREAMER
         let globalFilesList = [];
         const fileList = document.getElementById("file-list");
+        const remoteQueueList = document.getElementById("remote-queue-list");
         const fileSearch = document.getElementById("file-search");
         const audioPlayer = document.getElementById("audio-player");
         
@@ -1262,6 +1273,54 @@
         const volumeIcon = document.getElementById("volume-icon");
 
         let currentFilePlaying = "";
+
+        async function loadQueue() {
+            try {
+                const res = await fetch("/queue");
+                if (!res.ok) return;
+                const queue = await res.json();
+                renderQueue(queue);
+            } catch (e) {}
+        }
+
+        function renderQueue(queue) {
+            if (!remoteQueueList) return;
+            remoteQueueList.innerHTML = "";
+            if (!queue || queue.length === 0) {
+                remoteQueueList.innerHTML = `
+                    <div style="text-align: center; font-size: 13px; color: var(--text-sub); margin: 20px 0;">
+                        <i data-lucide="list-music" style="width: 24px; height: 24px; margin-bottom: 8px; stroke-width: 1.5; color: rgba(255,255,255,0.15)"></i>
+                        <p style="margin:0;">${t("queue_empty")}</p>
+                    </div>`;
+                lucide.createIcons();
+                return;
+            }
+            queue.slice(0, 20).forEach(item => {
+                const card = document.createElement("div");
+                card.className = "file-card";
+                const status = item.status || "queued";
+                card.innerHTML = `
+                    <div class="file-info">
+                        <i data-lucide="${status === 'error' ? 'circle-alert' : status === 'done' ? 'check-circle-2' : 'list-music'}"></i>
+                        <span class="file-name">${escapeHtml(item.title || item.url)}</span>
+                    </div>
+                    <div class="file-actions">
+                        <span style="font-size:10px;color:var(--text-sub);font-weight:700;text-transform:uppercase;">${escapeHtml(item.source || "other")} · ${escapeHtml(status)}</span>
+                    </div>
+                `;
+                remoteQueueList.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
 
         async function loadFiles() {
             try {
@@ -1449,6 +1508,8 @@
         setInterval(syncRemoteLanguage, 3000);
 
         // Initialize Files Polls
+        loadQueue();
+        setInterval(loadQueue, 3000);
         loadFiles();
         setInterval(loadFiles, 5000);
     </script>
