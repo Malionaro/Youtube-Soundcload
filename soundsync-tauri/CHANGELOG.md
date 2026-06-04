@@ -1,3 +1,18 @@
+----------------------------**V2.3.17**----------------------------
+
+**New Features:**
+- **Real Titles for Direct Queue Links:** Direct YouTube, SoundCloud, Spotify, Apple Music, and other supported links added to the Sammelkorb now try to fetch real metadata so the queue shows the actual track or video title instead of a generic placeholder.
+
+**Bug Fixes & UX Improvements:**
+- **Direct YouTube Queue Title Fix:** Fixed direct YouTube video links showing `YouTube Video / Musik` while playlist imports already displayed proper titles.
+- **Metadata Lookup Fallback:** If title lookup fails, SoundSync still adds the link with the existing source-based fallback label so the queue flow does not break.
+
+**Internal:**
+- **Queue Title Lookup Helper:** Added frontend metadata lookup through the existing `get_playlist_info` path for single Sammelkorb links.
+- **Unified Version Bump:** Synchronized all project version identifiers to `2.3.17` across package metadata, Tauri config, Cargo files, package lock, and visible UI badges.
+
+---
+
 ----------------------------**V2.3.16**----------------------------
 
 **New Features:**

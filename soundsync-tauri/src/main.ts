@@ -1523,23 +1523,7 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
   // Deduce a nice placeholder title
   let inferredTitle = title || "";
   if (!inferredTitle) {
-    try {
-      const parsed = new URL(url);
-      const host = parsed.hostname.toLowerCase();
-      if (host.includes("youtube.com") || host.includes("youtu.be")) {
-        inferredTitle = "YouTube Video / Musik";
-      } else if (host.includes("soundcloud.com")) {
-        inferredTitle = "SoundCloud Track";
-      } else if (host.includes("spotify.com")) {
-        inferredTitle = "Spotify Link";
-      } else if (host.includes("music.apple.com")) {
-        inferredTitle = "Apple Music Link";
-      } else {
-        inferredTitle = "Anderer Musik-Link";
-      }
-    } catch {
-      inferredTitle = "Musik-Link";
-    }
+    inferredTitle = await fetchQueueTitle(url);
   }
 
   clipboardQueue.push({
@@ -1566,6 +1550,31 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
 
   saveQueue();
   renderQueue();
+}
+
+async function fetchQueueTitle(url: string): Promise<string> {
+  try {
+    const info = await invoke<PlaylistInfo>("get_playlist_info", {
+      url,
+      cookiesPath: config.cookies_path || null,
+    });
+    const title = info.entries?.[0]?.title || info.title;
+    if (title && title !== "Downloads") return title;
+  } catch {
+    // Fallback below keeps adding links responsive even when metadata lookup fails.
+  }
+
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes("youtube.com") || host.includes("youtu.be")) return "YouTube Video / Musik";
+    if (host.includes("soundcloud.com")) return "SoundCloud Track";
+    if (host.includes("spotify.com")) return "Spotify Link";
+    if (host.includes("music.apple.com")) return "Apple Music Link";
+    return "Anderer Musik-Link";
+  } catch {
+    return "Musik-Link";
+  }
 }
 
 function renderQueue() {
