@@ -241,5 +241,18 @@
   "error_help_unknown": "Details stehen direkt darunter im Log. Oft hilft yt-dlp aktualisieren oder den Link mit Cookies erneut versuchen.",
   "notification_url_detected_title": "SoundSync URL erkannt",
   "notification_url_detected_body": "YouTube/SoundCloud-Link gefunden. In der App übernehmen? {url}",
-  "notification_urls_detected_body": "{count} YouTube/SoundCloud-Links gefunden. In SoundSync sammeln?"
+  "notification_urls_detected_body": "{count} YouTube/SoundCloud-Links gefunden. In SoundSync sammeln?",
+  "select_cookies_short": "Cookies wählen",
+  "retry_last_action": "Erneut versuchen",
+  "dismiss": "Schließen",
+  "choose_folder": "Ordner wählen",
+  "start_now": "Loslegen",
+  "select_download_folder": "Download-Ordner wählen",
+  "onboarding_title": "SoundSync schnell einrichten",
+  "onboarding_step_folder_title": "1. Zielordner wählen",
+  "onboarding_step_folder_desc": "Lege fest, wo fertige Downloads gespeichert werden.",
+  "onboarding_step_system_title": "2. Tools prüfen",
+  "onboarding_step_system_desc": "FFmpeg und yt-dlp werden automatisch geprüft.",
+  "onboarding_step_queue_title": "3. Links sammeln",
+  "onboarding_step_queue_desc": "Clipboard, Suche und Remote können Links direkt in den Sammelkorb legen."
 }

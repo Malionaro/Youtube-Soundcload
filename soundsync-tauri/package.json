@@ -1,11 +1,14 @@
 {
   "name": "soundsync-tauri",
   "private": true,
-  "version": "2.3.17",
+  "version": "2.3.18",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:tauri": "tauri build",
+    "build:linux": "tauri build --bundles deb,rpm",
+    "build:linux:appimage": "tauri build --bundles appimage",
     "preview": "vite preview",
     "tauri": "tauri"
   },

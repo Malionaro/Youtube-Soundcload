@@ -1,3 +1,24 @@
+----------------------------**V2.3.18**----------------------------
+
+**New Features:**
+- **First-Start Onboarding:** Added a one-time setup modal that guides new users through choosing a download folder, running the system check, and understanding the Sammelkorb workflow.
+- **Tray Download Controls:** Added native tray menu actions for Pause/Resume and Cancel so active downloads can be controlled while the main window is hidden.
+- **Live Tray Status:** The tray tooltip now follows the current app status, such as ready, downloading, paused, cancelled, or failed.
+
+**Bug Fixes & UX Improvements:**
+- **Actionable Error Panel:** Download and conversion errors now show a visible helper panel with quick actions for System Check, Cookies, Retry, and Close.
+- **Retry Last Failed Action:** The new error panel can restart the last failed download or conversion without rebuilding the input manually.
+- **No Mini Mode:** Removed the experimental Mini Mode again so the header stays clean and the normal layout remains consistent.
+- **Localized UX Text:** Added German, English, and Polish strings for onboarding and the new error actions.
+
+**Internal:**
+- **Shared Folder Picker Flow:** Reused one download-folder picker helper for the normal browse button and onboarding setup.
+- **Tray Event Bridge:** Tray menu actions now emit frontend events so existing Pause/Resume and Cancel logic stays centralized.
+- **Tray Status Command:** Added a backend command so the frontend can keep the native tray tooltip in sync.
+- **Unified Version Bump:** Synchronized all project version identifiers to `2.3.18` across package metadata, Tauri config, Cargo files, package lock, and visible UI badges.
+
+---
+
 ----------------------------**V2.3.17**----------------------------
 
 **New Features:**

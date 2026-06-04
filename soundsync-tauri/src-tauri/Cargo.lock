@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "SoundSync-Downloader"
-version = "2.3.17"
+version = "2.3.18"
 dependencies = [
  "arboard",
  "discord-rich-presence",

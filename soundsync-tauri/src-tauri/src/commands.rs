@@ -1580,3 +1580,12 @@ pub fn execute_after_download_action(action: String) -> Result<(), String> {
     let _ = action;
     Ok(())
 }
+
+#[tauri::command]
+pub fn update_tray_status(app: AppHandle, status: String) -> Result<(), String> {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_tooltip(Some(format!("SoundSync Downloader - {}", status)))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

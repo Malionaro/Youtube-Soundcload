@@ -10,6 +10,7 @@ use server::{ss_start_remote_server, ss_get_local_ip};
 use commands::*;
 
 use tauri::{
+    Emitter,
     menu::MenuBuilder,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
@@ -35,17 +36,23 @@ pub fn run() {
             let icon_bytes = include_bytes!("../icons/32x32.png");
             let icon = tauri::image::Image::from_bytes(icon_bytes)?;
             let tray_menu = MenuBuilder::new(app)
+                .text("status", "Status: Bereit")
+                .separator()
                 .text("show_ui", "UI öffnen")
                 .text("open_folder", "Download-Ordner öffnen")
+                .text("tray_pause_resume", "Pause/Fortsetzen")
+                .text("tray_cancel", "Download abbrechen")
                 .separator()
                 .text("quit", "Beenden")
                 .build()?;
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(icon)
+                .tooltip("SoundSync Downloader - Bereit")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
+                    "status" => {}
                     "show_ui" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
@@ -61,6 +68,12 @@ pub fn run() {
                         if !folder_path.is_empty() {
                             let _ = open_folder(folder_path);
                         }
+                    }
+                    "tray_pause_resume" => {
+                        let _ = app.emit("tray-pause-resume", ());
+                    }
+                    "tray_cancel" => {
+                        let _ = app.emit("tray-cancel-download", ());
                     }
                     "quit" => {
                         if let Some(window) = app.get_webview_window("main") {
@@ -140,7 +153,8 @@ pub fn run() {
             search_playlists,
             get_trending_videos,
             import_playlist_tracks,
-            execute_after_download_action
+            execute_after_download_action,
+            update_tray_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

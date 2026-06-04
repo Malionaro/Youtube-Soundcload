@@ -241,5 +241,18 @@
   "error_help_unknown": "Surowe szczegóły są pokazane bezpośrednio niżej w logu. Często pomaga aktualizacja yt-dlp albo ponowna próba z cookies.",
   "notification_url_detected_title": "SoundSync wykrył URL",
   "notification_url_detected_body": "Znaleziono link YouTube/SoundCloud. Użyć go w aplikacji? {url}",
-  "notification_urls_detected_body": "Znaleziono {count} linków YouTube/SoundCloud. Dodać je do SoundSync?"
+  "notification_urls_detected_body": "Znaleziono {count} linków YouTube/SoundCloud. Dodać je do SoundSync?",
+  "select_cookies_short": "Wybierz cookies",
+  "retry_last_action": "Spróbuj ponownie",
+  "dismiss": "Zamknij",
+  "choose_folder": "Wybierz folder",
+  "start_now": "Zaczynamy",
+  "select_download_folder": "Wybierz folder pobierania",
+  "onboarding_title": "Szybka konfiguracja SoundSync",
+  "onboarding_step_folder_title": "1. Wybierz folder docelowy",
+  "onboarding_step_folder_desc": "Ustaw, gdzie mają być zapisywane gotowe pobrania.",
+  "onboarding_step_system_title": "2. Sprawdź narzędzia",
+  "onboarding_step_system_desc": "FFmpeg i yt-dlp są sprawdzane automatycznie.",
+  "onboarding_step_queue_title": "3. Zbieraj linki",
+  "onboarding_step_queue_desc": "Schowek, wyszukiwarka i Remote mogą dodawać linki prosto do kolejki."
 }

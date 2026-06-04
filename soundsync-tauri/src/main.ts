@@ -77,6 +77,7 @@ function logErrorDetails(error: unknown, context?: string) {
     const compactRaw = diagnosis.raw.split("\n").slice(-6).join(" | ");
     log(`Details: ${compactRaw}`, "info");
   }
+  showErrorPanel(diagnosis.titleKey, diagnosis.helpKey);
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -159,6 +160,7 @@ let currentTranslations: Record<string, string> = {};
 let notificationActionListenerReady = false;
 let trackProgressByIndex = new Map<number, number>();
 let isDownloadPaused = false;
+let lastFailedAction: (() => void | Promise<void>) | null = null;
 
 let isBatchQueueMode = false;
 interface QueueItem {
@@ -299,6 +301,55 @@ function on(id: string, event: string, handler: (e: any) => void) {
   }
 }
 
+async function chooseDownloadFolder() {
+  const folder = await open({
+    directory: true,
+    multiple: false,
+    title: _("select_download_folder"),
+  });
+  if (folder) {
+    config.download_folder = folder as string;
+    folderInput.value = config.download_folder;
+    await saveConfigImmediate();
+    updateDownloadBtnState();
+    logKey("log_folder_set", "success", { path: config.download_folder });
+  }
+}
+
+function showErrorPanel(titleKey: string, helpKey: string) {
+  const panel = maybeElement("ux-error-panel");
+  if (!panel) return;
+  $("ux-error-title").textContent = _(titleKey);
+  $("ux-error-help").textContent = _(helpKey);
+  panel.style.display = "flex";
+
+  const cookiesBtn = maybeElement("ux-error-cookies-btn") as HTMLButtonElement | null;
+  if (cookiesBtn) {
+    cookiesBtn.style.display = titleKey === "error_title_cookies" ? "" : "none";
+  }
+}
+
+function hideErrorPanel() {
+  const panel = maybeElement("ux-error-panel");
+  if (panel) panel.style.display = "none";
+}
+
+function showOnboardingIfNeeded() {
+  if (localStorage.getItem("soundsync_onboarding_done_v1") === "1") return;
+  const modal = maybeElement("onboarding-modal");
+  if (modal) modal.style.display = "flex";
+}
+
+function closeOnboarding() {
+  localStorage.setItem("soundsync_onboarding_done_v1", "1");
+  const modal = maybeElement("onboarding-modal");
+  if (modal) modal.style.display = "none";
+}
+
+function updateTrayStatus(status: string) {
+  void invoke("update_tray_status", { status }).catch(() => {});
+}
+
 function updateQualityOptions() {
   const isVideo = (formatSelect.options[formatSelect.selectedIndex].parentNode as HTMLOptGroupElement)?.label === "Video";
   if (isVideo) {
@@ -378,6 +429,8 @@ async function init() {
   void syncRemoteQueue();
   checkSystem();
   log(`🎵 SoundSync Downloader v${appVersion} ready`, "success");
+  updateTrayStatus(_("ready"));
+  window.setTimeout(showOnboardingIfNeeded, 700);
   
   // Auto-check for updates on startup
   setTimeout(() => checkForUpdates(false), 2000);
@@ -761,6 +814,30 @@ function setupEventListeners() {
   });
 
   on("check-update-btn", "click", () => checkForUpdates(true));
+  on("ux-error-dismiss-btn", "click", hideErrorPanel);
+  on("ux-error-system-btn", "click", () => {
+    hideErrorPanel();
+    $("system-modal").style.display = "flex";
+    checkSystem();
+  });
+  on("ux-error-cookies-btn", "click", () => {
+    hideErrorPanel();
+    getEl<HTMLButtonElement>("cookies-btn").click();
+  });
+  on("ux-error-retry-btn", "click", () => {
+    hideErrorPanel();
+    void lastFailedAction?.();
+  });
+  on("onboarding-close", "click", closeOnboarding);
+  on("onboarding-done-btn", "click", closeOnboarding);
+  on("onboarding-folder-btn", "click", async () => {
+    await chooseDownloadFolder();
+  });
+  on("onboarding-system-btn", "click", () => {
+    closeOnboarding();
+    $("system-modal").style.display = "flex";
+    checkSystem();
+  });
 
   on("perform-search-btn", "click", performSearch);
   on("search-input", "keypress", (e: KeyboardEvent) => {
@@ -832,16 +909,7 @@ function setupEventListeners() {
   });
 
   // Browse folder
-  on("browse-btn", "click", async () => {
-    const folder = await open({ directory: true, title: _("folder_label") });
-    if (folder) {
-      config.download_folder = folder as string;
-      folderInput.value = config.download_folder;
-      void saveConfig();
-      logKey("log_folder_set", "success", { path: config.download_folder });
-      updateDownloadBtnState();
-    }
-  });
+  on("browse-btn", "click", chooseDownloadFolder);
 
   // Open folder
   on("open-folder-btn", "click", async () => {
@@ -1144,6 +1212,14 @@ function setupEventListeners() {
 
 // ─── Tauri Event Listeners ───────────────────────────────────────────────────
 function setupTauriListeners() {
+  listen("tray-pause-resume", () => {
+    if (isDownloading) void toggleDownloadPause();
+  });
+
+  listen("tray-cancel-download", () => {
+    if (isDownloading) void cancelDownload();
+  });
+
   listen<DownloadProgress>("download-progress", (event) => {
     if (!isDownloading) return;
     const p = event.payload;
@@ -1809,6 +1885,7 @@ async function importPlaylist(url: string, source: "clipboard" | "extension" | "
 async function startDownload() {
   let url = urlInput.value.trim();
   if (!url || !config.download_folder) return;
+  lastFailedAction = () => startDownload();
   const runId = ++downloadRunId;
 
   setDownloadUiState(true);
@@ -2113,6 +2190,7 @@ async function startConversion() {
   const filesToConvert = selectedConversionFiles.length > 0 ? selectedConversionFiles : [inputPath].filter(Boolean);
 
   if (filesToConvert.length === 0) return;
+  lastFailedAction = () => startConversion();
 
   $("modal-progress-container").style.display = "block";
   ($("modal-convert-progress") as HTMLElement).style.width = "0%";
@@ -2239,6 +2317,7 @@ function setStatus(text: string, type: string = "info") {
   dot.className = "status-dot";
   if (type === "error") dot.classList.add("error");
   if (type === "warning") dot.classList.add("warning");
+  updateTrayStatus(text);
 }
 
 function updateDownloadBtnState() {
@@ -2255,6 +2334,7 @@ function setDownloadUiState(downloading: boolean) {
   (getEl("convert-btn") as HTMLButtonElement).disabled = downloading;
   if (!downloading) setDownloadPaused(false);
   updateDownloadBtnState();
+  updateTrayStatus(downloading ? _("downloading") : _("ready"));
 }
 
 function setDownloadPaused(paused: boolean) {
@@ -2265,6 +2345,7 @@ function setDownloadPaused(paused: boolean) {
   if (text) text.textContent = paused ? _("resume_download") : _("pause_download");
   if (pauseIcon) pauseIcon.style.display = paused ? "none" : "";
   if (playIcon) playIcon.style.display = paused ? "" : "none";
+  if (isDownloading) updateTrayStatus(paused ? _("download_paused") : _("downloading"));
 }
 
 function resetProgress() {

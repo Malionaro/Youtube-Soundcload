@@ -1348,6 +1348,112 @@ input:checked + .toggle-track::after {
 
 .settings-list { display: flex; flex-direction: column; gap: 8px; }
 
+/* ═══ UX Helpers ═══ */
+.ux-error-panel {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  width: min(760px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--glass-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-secondary) 90%, black 10%);
+  box-shadow: 0 18px 50px rgba(0,0,0,0.5), 0 0 24px rgba(255,94,87,0.12);
+  backdrop-filter: blur(24px) saturate(1.25);
+  z-index: 4500;
+}
+
+.ux-error-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ux-error-copy strong {
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ux-error-copy span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ux-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.onboarding-modal {
+  max-width: 620px;
+}
+
+.onboarding-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.onboarding-step {
+  min-height: 118px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--bg-input);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboarding-step strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.onboarding-step span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.onboarding-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .ux-error-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ux-error-actions {
+    justify-content: stretch;
+  }
+
+  .ux-error-actions .btn {
+    flex: 1;
+  }
+
+  .onboarding-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Toggles are consolidated at the top */
 
 /* ═══ Dynamic Customization ═══ */
@@ -1937,48 +2043,72 @@ body.tv-mode *:focus {
 }
 .info-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  background: var(--primary);
-  color: white;
-  font-size: 10px;
-  font-weight: bold;
-  width: 16px;
-  height: 16px;
+  top: -6px;
+  right: -5px;
+  background: linear-gradient(135deg, var(--primary), #48c6ef);
+  color: #06110f;
+  font-size: 9px;
+  font-weight: 800;
+  width: 17px;
+  height: 17px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-  font-family: monospace;
+  box-shadow: 0 0 0 2px var(--bg-secondary), 0 6px 14px rgba(0,0,0,0.35), 0 0 12px var(--primary-glow);
+  font-family: var(--font);
+  line-height: 1;
+  pointer-events: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .custom-tooltip {
   position: absolute;
-  top: 120%;
-  right: 0;
-  width: max-content;
-  max-width: 250px;
-  background: var(--bg-secondary);
-  backdrop-filter: blur(15px);
+  right: -8px;
+  top: calc(100% + 12px);
+  width: 260px;
+  max-width: min(260px, calc(100vw - 32px));
+  background: #11111b;
+  backdrop-filter: blur(18px) saturate(1.35);
   color: var(--text-primary);
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.4;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-  border: 1px solid var(--border);
+  padding: 11px 13px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  box-shadow: 0 18px 44px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  border: 1px solid var(--glass-border);
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-10px);
-  transition: all 0.2s ease;
-  z-index: 1000;
+  transform: translateY(6px) scale(0.98);
+  transform-origin: top right;
+  transition: opacity 0.16s ease, visibility 0.16s ease, transform 0.16s ease;
+  z-index: 5000;
   pointer-events: none;
   text-align: left;
+  white-space: normal;
 }
+.custom-tooltip::after {
+  content: "";
+  position: absolute;
+  right: 18px;
+  top: -7px;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-left: 1px solid var(--glass-border);
+  border-top: 1px solid var(--glass-border);
+  transform: rotate(45deg);
+}
+.tooltip-container:hover .info-badge,
+.tooltip-container:focus-visible .info-badge {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px var(--bg-secondary), 0 8px 18px rgba(0,0,0,0.4), 0 0 18px var(--primary-glow);
+}
+.tooltip-container:focus-visible .custom-tooltip,
 .tooltip-container:hover .custom-tooltip {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 /* ═══ Sammelkorb (Clipboard Queue) Styles ═══ */
