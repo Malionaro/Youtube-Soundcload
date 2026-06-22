@@ -254,5 +254,22 @@
   "onboarding_step_system_title": "2. Tools prüfen",
   "onboarding_step_system_desc": "FFmpeg und yt-dlp werden automatisch geprüft.",
   "onboarding_step_queue_title": "3. Links sammeln",
-  "onboarding_step_queue_desc": "Clipboard, Suche und Remote können Links direkt in den Sammelkorb legen."
+  "onboarding_step_queue_desc": "Clipboard, Suche und Remote können Links direkt in den Sammelkorb legen.",
+  "sponsorblock_label": "SponsorBlock",
+  "sponsorblock_desc": "Markiere oder entferne Sponsor-, Intro- und Eigenwerbung-Segmente bei YouTube-Downloads.",
+  "sponsorblock_off": "Aus",
+  "sponsorblock_mark": "Als Kapitel markieren",
+  "sponsorblock_remove": "Segmente entfernen",
+  "sponsorblock_categories_hint": "Kategorien als Komma-Liste, z.B. sponsor,selfpromo,interaction,intro,outro,preview",
+  "gpu_encoder_label": "GPU-Encoding",
+  "gpu_encoder_desc": "Wähle den FFmpeg-Hardware-Encoder für Video-Konvertierung, wenn deine GPU ihn unterstützt.",
+  "gpu_encoder_auto": "Auto / FFmpeg Standard",
+  "gpu_encoder_off": "Aus",
+  "update_ytdlp_btn": "yt-dlp aktualisieren",
+  "log_checking_ytdlp_update": "Prüfe auf yt-dlp Updates...",
+  "log_ytdlp_up_to_date": "✅ yt-dlp ist bereits auf dem neuesten Stand.",
+  "log_ytdlp_update_failed": "⚠️ yt-dlp Update-Prüfung fehlgeschlagen: {error}",
+  "updating_ytdlp": "Aktualisiere yt-dlp...",
+  "log_updating_ytdlp_manual": "Starte manuelles yt-dlp Update...",
+  "ytdlp_update_failed": "Update fehlgeschlagen"
 }

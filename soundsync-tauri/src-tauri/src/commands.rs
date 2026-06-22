@@ -931,7 +931,7 @@ pub async fn resume_download(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn convert_file(app: AppHandle, request: ConvertRequest) -> Result<String, String> {
+pub async fn convert_file(app: AppHandle, state: State<'_, AppState>, request: ConvertRequest) -> Result<String, String> {
     let input = request.input_path.clone();
     let output_format = request.output_format.clone();
     let quality = request.quality.clone();
@@ -969,6 +969,21 @@ pub async fn convert_file(app: AppHandle, request: ConvertRequest) -> Result<Str
         "0".to_string(),
         "-y".to_string(),
     ];
+
+    let gpu_encoder = { state.config.lock().unwrap().gpu_encoder.clone() };
+    if gpu_encoder != "auto" && gpu_encoder != "off" {
+        match gpu_encoder.as_str() {
+            "nvenc_h264" => args.extend(["-c:v".to_string(), "h264_nvenc".to_string(), "-cq".to_string(), "23".to_string()]),
+            "nvenc_hevc" => args.extend(["-c:v".to_string(), "hevc_nvenc".to_string(), "-cq".to_string(), "23".to_string()]),
+            "qsv_h264" => args.extend(["-c:v".to_string(), "h264_qsv".to_string(), "-global_quality".to_string(), "25".to_string()]),
+            "qsv_hevc" => args.extend(["-c:v".to_string(), "hevc_qsv".to_string(), "-global_quality".to_string(), "25".to_string()]),
+            "amf_h264" => args.extend(["-c:v".to_string(), "h264_amf".to_string(), "-quality".to_string(), "balanced".to_string()]),
+            "amf_hevc" => args.extend(["-c:v".to_string(), "hevc_amf".to_string(), "-quality".to_string(), "balanced".to_string()]),
+            "videotoolbox_h264" => args.extend(["-c:v".to_string(), "h264_videotoolbox".to_string(), "-q:v".to_string(), "65".to_string()]),
+            "videotoolbox_hevc" => args.extend(["-c:v".to_string(), "hevc_videotoolbox".to_string(), "-q:v".to_string(), "65".to_string()]),
+            _ => {}
+        }
+    }
 
     // Quality mapping
     match quality.as_str() {
@@ -1177,6 +1192,40 @@ pub async fn install_ytdlp() -> Result<String, String> {
         };
         run_shell_install("yt-dlp", &command)
     }
+}
+
+#[tauri::command]
+pub async fn update_ytdlp() -> Result<String, String> {
+    // 1. Try running `yt-dlp --update`
+    let mut cmd = Command::new("yt-dlp");
+    cmd.arg("--update");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+
+    match cmd.output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            if output.status.success() {
+                let msg = if stdout.trim().is_empty() {
+                    "yt-dlp is up to date".to_string()
+                } else {
+                    stdout.trim().to_string()
+                };
+                return Ok(msg);
+            } else {
+                println!("yt-dlp --update returned status code: {:?}", output.status.code());
+                println!("stdout: {}", stdout);
+                println!("stderr: {}", stderr);
+            }
+        }
+        Err(e) => {
+            println!("Failed to run yt-dlp --update: {:?}", e);
+        }
+    }
+
+    // 2. Fall back to install/upgrade command (winget/pip/brew)
+    install_ytdlp().await
 }
 
 #[tauri::command]

@@ -254,5 +254,22 @@
   "onboarding_step_system_title": "2. Check tools",
   "onboarding_step_system_desc": "FFmpeg and yt-dlp are checked automatically.",
   "onboarding_step_queue_title": "3. Collect links",
-  "onboarding_step_queue_desc": "Clipboard, Search, and Remote can add links straight to the queue."
+  "onboarding_step_queue_desc": "Clipboard, Search, and Remote can add links straight to the queue.",
+  "sponsorblock_label": "SponsorBlock",
+  "sponsorblock_desc": "Mark or remove sponsor, intro, and self-promotion segments in YouTube downloads.",
+  "sponsorblock_off": "Off",
+  "sponsorblock_mark": "Mark as chapters",
+  "sponsorblock_remove": "Remove segments",
+  "sponsorblock_categories_hint": "Comma-separated categories, e.g. sponsor,selfpromo,interaction,intro,outro,preview",
+  "gpu_encoder_label": "GPU encoding",
+  "gpu_encoder_desc": "Choose the FFmpeg hardware encoder for video conversion if your GPU supports it.",
+  "gpu_encoder_auto": "Auto / FFmpeg default",
+  "gpu_encoder_off": "Off",
+  "update_ytdlp_btn": "Update yt-dlp",
+  "log_checking_ytdlp_update": "Checking for yt-dlp updates...",
+  "log_ytdlp_up_to_date": "✅ yt-dlp is already up to date.",
+  "log_ytdlp_update_failed": "⚠️ yt-dlp update check failed: {error}",
+  "updating_ytdlp": "Updating yt-dlp...",
+  "log_updating_ytdlp_manual": "Starting manual yt-dlp update...",
+  "ytdlp_update_failed": "Update failed"
 }

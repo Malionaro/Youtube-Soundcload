@@ -1,20 +1,41 @@
+----------------------------**V2.3.19**----------------------------
+
+**New Features:**
+- **Automatic & Manual yt-dlp Updates:** SoundSync now automatically checks for and updates `yt-dlp` in the background on startup. A manual **yt-dlp aktualisieren** button has also been added next to the tool's status indicator in the System Check modal.
+- **Premium Track List Cascade Animation:** Enhanced the downloaded track cards enter animation with spring-based physics (`cubic-bezier(0.34, 1.56, 0.64, 1)`) and cascading staggered delays for a premium, organic UI feel.
+
+**Bug Fixes & UX Improvements:**
+- **Batch Queue Retry Routing Fix:** Fixed the "Erneut versuchen" (Retry) action from the error popup when batch downloading. It now restarts the batch queue download instead of crashing on the literal placeholder string `"Sammelkorb Batch-Download"`.
+- **DRM-Protected Content Detection:** Added specific diagnostic error handling for DRM-protected SoundCloud/YouTube streams.
+
+**Internal:**
+- **yt-dlp Update Command:** Added a backend `update_ytdlp` command that runs `yt-dlp --update` natively and falls back to package managers (`winget`, `pip`, or `brew`) if needed.
+- **GPU-Encoding Backend Integration:** Rebuilt backend hardware-acceleration arguments mapping for video conversion.
+- **Unified Version Bump:** Synchronized all project version identifiers to `2.3.19` across package metadata, Tauri config, Cargo files, package lock, and visible UI badges.
+
+---
+
 ----------------------------**V2.3.18**----------------------------
 
 **New Features:**
 - **First-Start Onboarding:** Added a one-time setup modal that guides new users through choosing a download folder, running the system check, and understanding the Sammelkorb workflow.
 - **Tray Download Controls:** Added native tray menu actions for Pause/Resume and Cancel so active downloads can be controlled while the main window is hidden.
 - **Live Tray Status:** The tray tooltip now follows the current app status, such as ready, downloading, paused, cancelled, or failed.
+- **SponsorBlock Integration:** Added settings to mark or remove SponsorBlock segments for YouTube downloads through yt-dlp.
+- **Advanced GPU Encoder Selection:** Added a FFmpeg GPU encoder selector for NVIDIA NVENC, Intel Quick Sync, AMD AMF, and Apple VideoToolbox.
 
 **Bug Fixes & UX Improvements:**
 - **Actionable Error Panel:** Download and conversion errors now show a visible helper panel with quick actions for System Check, Cookies, Retry, and Close.
 - **Retry Last Failed Action:** The new error panel can restart the last failed download or conversion without rebuilding the input manually.
 - **No Mini Mode:** Removed the experimental Mini Mode again so the header stays clean and the normal layout remains consistent.
-- **Localized UX Text:** Added German, English, and Polish strings for onboarding and the new error actions.
+- **Localized UX Text:** Added German, English, and Polish strings for onboarding, SponsorBlock, GPU encoding, and the new error actions.
 
 **Internal:**
 - **Shared Folder Picker Flow:** Reused one download-folder picker helper for the normal browse button and onboarding setup.
 - **Tray Event Bridge:** Tray menu actions now emit frontend events so existing Pause/Resume and Cancel logic stays centralized.
 - **Tray Status Command:** Added a backend command so the frontend can keep the native tray tooltip in sync.
+- **yt-dlp SponsorBlock Args:** Download commands now pass `--sponsorblock-mark` or `--sponsorblock-remove` with configured categories for supported YouTube URLs.
+- **FFmpeg Encoder Args:** Conversion commands now map the selected GPU backend to the matching FFmpeg encoder flags for video output.
 - **Unified Version Bump:** Synchronized all project version identifiers to `2.3.18` across package metadata, Tauri config, Cargo files, package lock, and visible UI badges.
 
 ---

@@ -434,6 +434,22 @@ async function init() {
   
   // Auto-check for updates on startup
   setTimeout(() => checkForUpdates(false), 2000);
+  setTimeout(() => autoUpdateYtdlp(), 3500);
+}
+
+async function autoUpdateYtdlp() {
+  log(_("log_checking_ytdlp_update"), "info");
+  try {
+    const result = await invoke<string>("update_ytdlp");
+    if (result.includes("is up to date")) {
+      log(_("log_ytdlp_up_to_date"), "success");
+    } else {
+      log(`🔄 yt-dlp: ${result}`, "success");
+      await checkSystem(false);
+    }
+  } catch (e) {
+    log(_("log_ytdlp_update_failed", { error: String(e) }), "warning");
+  }
 }
 
 // ─── Search & Trending ───────────────────────────────────────────────────────
@@ -1129,6 +1145,26 @@ function setupEventListeners() {
     } finally {
       btn.disabled = false;
       btn.textContent = _("install_ytdlp_btn");
+    }
+  });
+
+  on("update-ytdlp-btn", "click", async (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    const status = $("ytdlp-status");
+    btn.disabled = true;
+    btn.textContent = _("updating_ytdlp");
+    status.textContent = _("updating_ytdlp");
+    log(_("log_updating_ytdlp_manual"), "info");
+    try {
+      const res = await invoke<string>("update_ytdlp");
+      log(`✅ ${res}`, "success");
+      await checkSystem(false);
+    } catch (err) {
+      status.textContent = _("ytdlp_update_failed");
+      log(`❌ ${err}`, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = _("update_ytdlp_btn");
     }
   });
 
@@ -1885,7 +1921,11 @@ async function importPlaylist(url: string, source: "clipboard" | "extension" | "
 async function startDownload() {
   let url = urlInput.value.trim();
   if (!url || !config.download_folder) return;
-  lastFailedAction = () => startDownload();
+  if (isBatchQueueMode) {
+    lastFailedAction = () => startBatchDownload();
+  } else {
+    lastFailedAction = () => startDownload();
+  }
   const runId = ++downloadRunId;
 
   setDownloadUiState(true);
@@ -2033,6 +2073,10 @@ async function startDownload() {
 
     if (isDownloading && runId === downloadRunId) {
       setDownloadUiState(false);
+      if (urlInput.value === "Sammelkorb Batch-Download") {
+        urlInput.value = "";
+        updateDownloadBtnState();
+      }
 
       downloadProgress.style.width = "100%";
       convertProgress.style.width = "100%";
@@ -2050,6 +2094,10 @@ async function startDownload() {
     logErrorDetails(e);
     setStatus(_("error_occurred"), "error");
     setDownloadUiState(false);
+    if (urlInput.value === "Sammelkorb Batch-Download") {
+      urlInput.value = "";
+      updateDownloadBtnState();
+    }
   }
 }
 
@@ -2144,6 +2192,10 @@ async function cancelDownload() {
   // UI sofort zurücksetzen für besseres Feedback
   setDownloadUiState(false);
   setDownloadPaused(false);
+  if (urlInput.value === "Sammelkorb Batch-Download") {
+    urlInput.value = "";
+    updateDownloadBtnState();
+  }
   
   downloadProgress.classList.remove("active");
   totalProgress.classList.remove("active");
@@ -2252,11 +2304,13 @@ async function checkSystem(autoShowModal: boolean = true) {
       ytdlpIcon.classList.remove("loading");
       ytdlpStatus.textContent = result.ytdlp_version;
       $("install-ytdlp-btn").style.display = "none";
+      $("update-ytdlp-btn").style.display = "inline-flex";
     } else {
       ytdlpIcon.textContent = "❌";
       ytdlpIcon.classList.remove("loading");
       ytdlpStatus.textContent = _("ytdlp_missing");
       $("install-ytdlp-btn").style.display = "block";
+      $("update-ytdlp-btn").style.display = "none";
       isMissingDependencies = true;
     }
 
@@ -2426,6 +2480,7 @@ function addTrackCard(entry: PlaylistEntry) {
   const card = document.createElement("div");
   card.className = "track-card";
   card.id = `track-card-${entry.index}`;
+  card.style.animationDelay = `${(entry.index - 1) * 0.05}s`;
 
   const thumb = document.createElement("img");
   thumb.className = "track-thumb";

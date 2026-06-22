@@ -968,7 +968,7 @@ input:checked + .toggle-track::after {
     background-color 0.25s ease,
     box-shadow 0.25s ease,
     opacity 0.25s ease;
-  animation: trackEnter 0.28s ease-out both;
+  animation: trackEnter 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   position: relative;
   cursor: pointer;
   overflow: hidden;
@@ -1013,8 +1013,14 @@ input:checked + .toggle-track::after {
 }
 
 @keyframes trackEnter {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .track-thumb {

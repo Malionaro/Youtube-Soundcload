@@ -44,10 +44,28 @@ pub struct AppConfig {
     pub auto_tagging: bool,
     #[serde(default = "default_after_download")]
     pub after_download: String,
+    #[serde(default = "default_sponsorblock_mode")]
+    pub sponsorblock_mode: String,
+    #[serde(default = "default_sponsorblock_categories")]
+    pub sponsorblock_categories: String,
+    #[serde(default = "default_gpu_encoder")]
+    pub gpu_encoder: String,
 }
 
 pub fn default_after_download() -> String {
     "nothing".to_string()
+}
+
+pub fn default_sponsorblock_mode() -> String {
+    "off".to_string()
+}
+
+pub fn default_sponsorblock_categories() -> String {
+    "sponsor,selfpromo,interaction".to_string()
+}
+
+pub fn default_gpu_encoder() -> String {
+    "auto".to_string()
 }
 
 pub fn default_auto_url_detection() -> bool {
@@ -79,6 +97,9 @@ impl Default for AppConfig {
             eco_mode: true,
             auto_tagging: true,
             after_download: "nothing".to_string(),
+            sponsorblock_mode: "off".to_string(),
+            sponsorblock_categories: "sponsor,selfpromo,interaction".to_string(),
+            gpu_encoder: "auto".to_string(),
         }
     }
 }

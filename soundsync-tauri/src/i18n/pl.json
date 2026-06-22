@@ -254,5 +254,22 @@
   "onboarding_step_system_title": "2. Sprawdź narzędzia",
   "onboarding_step_system_desc": "FFmpeg i yt-dlp są sprawdzane automatycznie.",
   "onboarding_step_queue_title": "3. Zbieraj linki",
-  "onboarding_step_queue_desc": "Schowek, wyszukiwarka i Remote mogą dodawać linki prosto do kolejki."
+  "onboarding_step_queue_desc": "Schowek, wyszukiwarka i Remote mogą dodawać linki prosto do kolejki.",
+  "sponsorblock_label": "SponsorBlock",
+  "sponsorblock_desc": "Oznaczaj lub usuwaj segmenty sponsorowane, intro i autopromocję z pobrań YouTube.",
+  "sponsorblock_off": "Wyłączone",
+  "sponsorblock_mark": "Oznacz jako rozdziały",
+  "sponsorblock_remove": "Usuń segmenty",
+  "sponsorblock_categories_hint": "Kategorie rozdzielone przecinkami, np. sponsor,selfpromo,interaction,intro,outro,preview",
+  "gpu_encoder_label": "Kodowanie GPU",
+  "gpu_encoder_desc": "Wybierz sprzętowy encoder FFmpeg do konwersji wideo, jeśli GPU go obsługuje.",
+  "gpu_encoder_auto": "Auto / domyślne FFmpeg",
+  "gpu_encoder_off": "Wyłączone",
+  "update_ytdlp_btn": "Aktualizuj yt-dlp",
+  "log_checking_ytdlp_update": "Sprawdzanie aktualizacji yt-dlp...",
+  "log_ytdlp_up_to_date": "✅ yt-dlp jest już aktualny.",
+  "log_ytdlp_update_failed": "⚠️ Sprawdzanie aktualizacji yt-dlp nie powiodło się: {error}",
+  "updating_ytdlp": "Aktualizowanie yt-dlp...",
+  "log_updating_ytdlp_manual": "Rozpoczynanie ręcznej aktualizacji yt-dlp...",
+  "ytdlp_update_failed": "Aktualizacja nie powiodła się"
 }
