@@ -233,7 +233,7 @@
 
         input[type="text"] {
             width: 100%;
-            padding: 14px 14px 14px 44px;
+            padding: 14px 44px 14px 44px;
             background: var(--bg-input);
             border: 1px solid var(--border);
             border-radius: var(--radius-md);
@@ -248,6 +248,30 @@
             background: rgba(30, 30, 46, 0.8);
             box-shadow: 0 0 0 4px rgba(142, 124, 243, 0.15);
         }
+
+        .paste-btn {
+            position: absolute;
+            right: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-sub);
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .paste-btn:hover, .paste-btn:active {
+            color: #ffffff;
+            background: var(--primary-gradient);
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px var(--primary-glow);
+            transform: scale(1.05);
+        }
+
 
         /* Config Grid Row */
         .control-row {
@@ -896,6 +920,9 @@
                 <div class="input-wrapper">
                     <i data-lucide="link-2"></i>
                     <input type="text" id="url-input" placeholder="YouTube oder SoundCloud..." data-i18n-placeholder="url_placeholder" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                    <button id="paste-btn" type="button" class="paste-btn" title="Einfügen">
+                        <i data-lucide="clipboard" style="position:static; width:16px; height:16px; color:inherit;"></i>
+                    </button>
                 </div>
             </div>
 
@@ -1014,6 +1041,24 @@
         lucide.createIcons();
 
         const urlInput = document.getElementById("url-input");
+        const pasteBtn = document.getElementById("paste-btn");
+
+        if (pasteBtn) {
+            pasteBtn.addEventListener("click", async () => {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text) {
+                        urlInput.value = text;
+                        showMessage(remoteLang === "de" ? "Link eingefügt!" : "Link pasted!", false);
+                    } else {
+                        showMessage(remoteLang === "de" ? "Zwischenablage ist leer." : "Clipboard is empty.", true);
+                    }
+                } catch (err) {
+                    // Fallback for browsers that block clipboard API
+                    showMessage(remoteLang === "de" ? "Bitte manuell gedrückt halten & einfügen" : "Please tap and hold to paste manually", true);
+                }
+            });
+        }
         const formatSelect = document.getElementById("format-select");
         const autoStartToggle = document.getElementById("auto-start-toggle");
         const sendBtn = document.getElementById("send-btn");
@@ -1050,7 +1095,7 @@
                 loading_files: "Lade Dateiliste...",
                 no_files: "Keine passenden Dateien gefunden.",
                 missing_url: "Bitte füge zuerst einen Link ein!",
-                send_success: "Erfolgreich an PC gesendet! 🚀",
+                send_success: "Erfolgreich an PC gesendet!",
                 send_server_error: "Serverfehler beim Senden!",
                 send_connection_error: "Verbindungsfehler zum PC!",
                 delete_confirm: "Möchtest du \"{file}\" wirklich endgültig löschen?",
@@ -1081,7 +1126,7 @@
                 loading_files: "Loading file list...",
                 no_files: "No matching files found.",
                 missing_url: "Please paste a link first!",
-                send_success: "Sent to PC successfully! 🚀",
+                send_success: "Sent to PC successfully!",
                 send_server_error: "Server error while sending!",
                 send_connection_error: "Connection error to PC!",
                 delete_confirm: "Do you really want to permanently delete \"{file}\"?",
@@ -1112,7 +1157,7 @@
                 loading_files: "Ładowanie listy plików...",
                 no_files: "Nie znaleziono pasujących plików.",
                 missing_url: "Najpierw wklej link!",
-                send_success: "Pomyślnie wysłano do PC! 🚀",
+                send_success: "Pomyślnie wysłano do PC!",
                 send_server_error: "Błąd serwera podczas wysyłania!",
                 send_connection_error: "Błąd połączenia z PC!",
                 delete_confirm: "Czy na pewno trwale usunąć \"{file}\"?",

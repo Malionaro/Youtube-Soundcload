@@ -134,6 +134,16 @@ body {
 .header-left { display: flex; align-items: center; gap: 12px; }
 .header-right { display: flex; align-items: center; gap: 8px; -webkit-app-region: no-drag; }
 
+/* Divider between header button groups */
+.header-right .header-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--glass-border);
+  border-radius: 2px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
 .logo-icon {
   width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
   background: linear-gradient(135deg, var(--accent), var(--primary));
@@ -1312,6 +1322,11 @@ input:checked + .toggle-track::after {
   animation: rotate 2s linear infinite;
 }
 
+.check-icon.loading svg {
+  animation: rotate 1.2s linear infinite;
+  display: block;
+}
+
 @keyframes rotate {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -1537,9 +1552,10 @@ input:checked + .toggle-track::after {
 
 .qr-container {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   align-items: center;
-  width: 160px; /* Breiter für die URL */
+  width: 150px;
+  height: 180px;
 }
 
 .btn-icon-copy {
