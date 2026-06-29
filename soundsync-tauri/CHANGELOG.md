@@ -1,3 +1,15 @@
+----------------------------**V2.3.20**----------------------------
+
+**New Features:**
+- **Mobile Clipboard Paste & Go:** Added a minimalist "Paste" button directly inside the remote web input field on `remote.html`. Users can now read their mobile clipboard and paste music links with a single tap.
+- **Emoji-Free Premium Iconography:** Replaced all visual emojis across the application with clean, responsive vector-based inline SVGs and Lucide icons (Fire→Trending, Inbox→Queue, Wrench→Convert, Leaf→Eco, Tag→Metadata, Hourglass→Spinner).
+
+**UX & Remote Upgrades:**
+- **Interactive Remote Setup Guide:** The remote control card inside PC Settings now includes a detailed 3-step guide for scanner onboarding, a phone icon, and a live "ONLINE" indicator badge.
+- **Unified Version Bump:** Synchronized all project version identifiers to `2.3.20` across package metadata, Tauri config, Cargo files, package lock, and visible UI badges.
+
+---
+
 ----------------------------**V2.3.19**----------------------------
 
 **New Features:**
