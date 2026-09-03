@@ -1,3 +1,17 @@
+----------------------------**V2.5.0**----------------------------
+
+**New Features:**
+- **Download History Tab:** Every finished and failed download is now stored in a dedicated history tab (title, link, format, quality, date, max 200 entries, survives restarts) – with per-entry re-download (fills the URL field and jumps to it), remove, and clear-all.
+
+**UX Improvements:**
+- **Smarter "Link Detected" Flow:** Confirming a detected link puts it visibly into the download field and jumps to the Downloader tab. Extra links from multi-detection go to the queue; while a download is running, everything goes to the queue so the running input is never overwritten.
+
+**Bug Fixes & Cleanup:**
+- **Double-Plus Button Fixed:** The queue "Add" button showed two plus signs (SVG icon plus emoji in the label) – emojis removed from the button texts in DE/EN/PL.
+- **Drag & Drop Zone Removed:** The unused drop area ("Drop URLs here to download") including its handler and texts is gone.
+
+---
+
 ----------------------------**V2.4.0**----------------------------
 
 **New Features:**
