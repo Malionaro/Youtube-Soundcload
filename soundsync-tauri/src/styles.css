@@ -2396,6 +2396,25 @@ body.tv-mode *:focus {
   color: var(--danger);
 }
 
+.queue-card-redownload {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.queue-card-redownload:hover {
+  background: rgba(0, 225, 186, 0.1);
+  color: var(--primary);
+}
+
 /* ═══ Spotify & Apple Music Playlist Importer ═══ */
 .btn-import-active {
   background: linear-gradient(135deg, #8e7cf3, #b666ff) !important;

@@ -182,6 +182,22 @@ let queueSortSelect: HTMLSelectElement;
 let queueRetryFailedBtn: HTMLButtonElement;
 const QUEUE_STORAGE_KEY = "soundsync_clipboard_queue_v2";
 
+// ─── Download History (Verlauf) ──────────────────────────────────────────────
+interface HistoryEntry {
+  id: string;
+  title: string;
+  url: string;
+  format: string;
+  quality: string;
+  status: "done" | "error";
+  finishedAt: number;
+}
+let downloadHistory: HistoryEntry[] = [];
+let historyList: HTMLElement;
+let historyClearBtn: HTMLButtonElement;
+const HISTORY_STORAGE_KEY = "soundsync_history_v1";
+const HISTORY_MAX_ENTRIES = 200;
+
 // ─── DOM Elements ────────────────────────────────────────────────────────────
 const $ = (id: string) => {
   const el = document.getElementById(id);
@@ -251,6 +267,8 @@ function setupElements() {
     queueSearchInput = getEl("queue-search-input") as HTMLInputElement;
     queueSortSelect = getEl("queue-sort-select") as HTMLSelectElement;
     queueRetryFailedBtn = getEl("queue-retry-failed-btn") as HTMLButtonElement;
+    historyList = getEl("history-list");
+    historyClearBtn = getEl("history-clear-btn") as HTMLButtonElement;
   } catch (e) {
     console.error("Kritischer Fehler: Wichtige UI-Elemente fehlen!", e);
   }
@@ -411,9 +429,10 @@ async function init() {
     if (config.discord_rpc === undefined) config.discord_rpc = true;
     if (config.format) formatSelect.value = config.format;
     
-    updateQualityOptions();
-    if (config.quality) qualitySelect.value = config.quality;
-    loadQueue();
+  updateQualityOptions();
+  if (config.quality) qualitySelect.value = config.quality;
+  loadQueue();
+  loadHistory();
 
     // Apply defaults for new settings
     if (config.auto_scroll_log === undefined) config.auto_scroll_log = true;
@@ -455,6 +474,7 @@ async function init() {
   setupTauriListeners();
   setupTabs();
   renderQueue();
+  renderHistory();
   // UI sofort bereit melden – Rest lazy im Hintergrund (Instant-Start)
   log(`🎵 SoundSync Downloader v${appVersion} ready`, "success");
   updateTrayStatus(_("ready"));
@@ -736,6 +756,7 @@ function updateUI() {
   $("tab-search-label").textContent = _("tab_search");
   $("tab-trending-label").textContent = _("tab_trending");
   $("tab-queue-label").textContent = _("tab_queue");
+  $("tab-history-label").textContent = _("tab_history");
   $("url-label").textContent = _("url_label");
   urlInput.placeholder = _("url_placeholder");
   $("folder-label").textContent = _("folder_label");
@@ -940,6 +961,7 @@ function setupEventListeners() {
   on("detected-url-dismiss", "click", hideDetectedUrlPrompt);
 
   on("queue-manual-input", "input", checkPlaylistUrlInput);
+  on("history-clear-btn", "click", clearHistory);
   on("queue-search-input", "input", renderQueue);
   on("queue-sort-select", "change", renderQueue);
   on("queue-retry-failed-btn", "click", retryFailedQueueItems);
@@ -2120,9 +2142,11 @@ async function startDownload() {
             saveQueue();
             renderQueue();
           }
+          recordHistory({ title: entry.title, url: entry.url, format: formatSelect.value, quality: qualitySelect.value, status: "done" });
         } catch (e) {
           if (!isDownloading) return;
           logErrorDetails(e, entry.title);
+          recordHistory({ title: entry.title, url: entry.url, format: formatSelect.value, quality: qualitySelect.value, status: "error" });
           const queueItem = clipboardQueue.find(item =>
             (entry.queueId && item.id === entry.queueId) || (!entry.queueId && item.url === entry.url)
           );
@@ -2278,7 +2302,123 @@ async function syncRemoteQueue() {
   }
 }
 
+// ─── Download History (Verlauf) ──────────────────────────────────────────────
+function saveHistory() {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(downloadHistory));
+  } catch (e) {
+    console.warn("Could not persist history:", e);
+  }
+}
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return;
+    const loaded = JSON.parse(raw) as Partial<HistoryEntry>[];
+    downloadHistory = loaded
+      .filter(item => item.url && item.title)
+      .map((item): HistoryEntry => ({
+        id: item.id || createQueueId(),
+        url: item.url!,
+        title: item.title!,
+        format: item.format || "mp3",
+        quality: item.quality || "best",
+        status: item.status === "error" ? "error" : "done",
+        finishedAt: item.finishedAt || Date.now(),
+      }))
+      .slice(0, HISTORY_MAX_ENTRIES);
+  } catch (e) {
+    console.warn("Could not load history:", e);
+    downloadHistory = [];
+  }
+}
+
+function recordHistory(entry: Omit<HistoryEntry, "id" | "finishedAt">) {
+  downloadHistory.unshift({
+    ...entry,
+    id: createQueueId(),
+    finishedAt: Date.now(),
+  });
+  if (downloadHistory.length > HISTORY_MAX_ENTRIES) {
+    downloadHistory.length = HISTORY_MAX_ENTRIES;
+  }
+  saveHistory();
+  renderHistory();
+}
+
+function clearHistory() {
+  downloadHistory = [];
+  saveHistory();
+  renderHistory();
+  logKey("log_history_cleared", "info");
+}
+
+function renderHistory() {
+  if (!historyList) return;
+
+  if (downloadHistory.length === 0) {
+    historyList.innerHTML = `
+      <div class="empty-state">
+         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+           <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+         </svg>
+         <p data-i18n="history_empty">${_("history_empty")}</p>
+      </div>
+    `;
+    if (historyClearBtn) historyClearBtn.disabled = true;
+    return;
+  }
+
+  if (historyClearBtn) historyClearBtn.disabled = false;
+
+  historyList.innerHTML = "";
+  downloadHistory.forEach((item) => {
+    const card = document.createElement("div");
+    card.className = `queue-card status-${item.status}`;
+
+    card.innerHTML = `
+      <div class="queue-card-source ${item.status === "done" ? "youtube" : "other"}">
+         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      </div>
+      <div class="queue-card-info">
+         <span class="queue-card-url" title="${escapeAttribute(item.title)}" style="font-weight:600">${escapeHtml(item.title)}</span>
+         <div class="queue-card-meta">
+            <span class="queue-source-badge">${escapeHtml(item.format)} · ${escapeHtml(item.quality)}</span>
+            <span class="queue-status-badge ${item.status}">${_("queue_status_" + item.status)}</span>
+            <span>${new Date(item.finishedAt).toLocaleString()}</span>
+         </div>
+         <span class="queue-card-url" title="${escapeAttribute(item.url)}">${escapeHtml(item.url)}</span>
+      </div>
+      <div class="queue-card-actions">
+         <button class="queue-card-redownload" title="${escapeAttribute(_("history_redownload"))}" data-id="${escapeAttribute(item.id)}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+         </button>
+         <button class="queue-card-remove" title="${escapeAttribute(_("history_remove"))}" data-id="${escapeAttribute(item.id)}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+         </button>
+      </div>
+    `;
+
+    card.querySelector(".queue-card-redownload")?.addEventListener("click", () => {
+      urlInput.value = item.url;
+      updateDownloadBtnState();
+      document.querySelector<HTMLElement>('.tab-btn[data-tab="downloader-tab"]')?.click();
+      logKey("log_url_accepted", "success", { url: item.url });
+    });
+
+    card.querySelector(".queue-card-remove")?.addEventListener("click", () => {
+      downloadHistory = downloadHistory.filter((h) => h.id !== item.id);
+      saveHistory();
+      renderHistory();
+    });
+
+    historyList.appendChild(card);
+  });
+}
+
 function getVisibleQueueItems(): QueueItem[] {
+
   const query = (queueSearchInput?.value || "").trim().toLowerCase();
   const sort = queueSortSelect?.value || "added_desc";
   let items = clipboardQueue.map((item, index) => ({ item, index }));

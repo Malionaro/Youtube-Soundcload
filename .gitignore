@@ -163,6 +163,7 @@ config.json
 ffmpeg/
 *.zip
 build_output/
+MIGRATION_SUMMARY.md
 # Chrome extension signing key + packaged binary – NEVER commit!
 *.pem
 *.crx
