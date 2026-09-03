@@ -97,6 +97,9 @@ interface AppConfig {
   eco_mode?: boolean;
   auto_tagging?: boolean;
   after_download?: string;
+  sponsorblock_mode?: string;
+  sponsorblock_categories?: string;
+  gpu_encoder?: string;
 }
 
 interface PlaylistEntry {
@@ -105,6 +108,7 @@ interface PlaylistEntry {
   thumbnail: string | null;
   duration: number | null;
   index: number;
+  queueId?: string;
 }
 
 interface PlaylistInfo {
@@ -179,7 +183,19 @@ let queueRetryFailedBtn: HTMLButtonElement;
 const QUEUE_STORAGE_KEY = "soundsync_clipboard_queue_v2";
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
-const $ = (id: string) => (document.getElementById(id) || document.createElement("div")) as HTMLElement;
+const $ = (id: string) => {
+  const el = document.getElementById(id);
+  if (!el) {
+    console.warn(`[DOM] #${id} fehlt – Dummy wird verwendet (bitte index.html prüfen)`);
+    return document.createElement("div") as HTMLElement;
+  }
+  return el as HTMLElement;
+};
+const $req = (id: string) => {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`[DOM] Pflicht-Element #${id} fehlt in index.html`);
+  return el as HTMLElement;
+};
 const maybeElement = (id: string) => document.getElementById(id);
 
 // Globale Elemente sicher abrufen
@@ -351,19 +367,22 @@ function updateTrayStatus(status: string) {
 }
 
 function updateQualityOptions() {
-  const isVideo = (formatSelect.options[formatSelect.selectedIndex].parentNode as HTMLOptGroupElement)?.label === "Video";
+  if (!formatSelect || formatSelect.selectedIndex < 0 || !formatSelect.options[formatSelect.selectedIndex]) return;
+  const opt = formatSelect.options[formatSelect.selectedIndex] as HTMLOptionElement;
+  const group = opt.parentElement as HTMLOptGroupElement | null;
+  const isVideo = group?.tagName === "OPTGROUP" && group.label === "Video";
   if (isVideo) {
     audioQualities.style.display = "none";
     videoQualities.style.display = "block";
     const currentVal = qualitySelect.value;
-    if (["best", "good", "worst"].includes(currentVal) && currentVal !== "best" && currentVal !== "worst") {
+    if (currentVal === "good") {
       qualitySelect.value = "1080p"; // sensible fallback
     }
   } else {
     audioQualities.style.display = "block";
     videoQualities.style.display = "none";
     const currentVal = qualitySelect.value;
-    if (["best", "4k", "1080p", "720p", "480p", "worst"].includes(currentVal) && currentVal !== "best" && currentVal !== "worst") {
+    if (["4k", "1080p", "720p", "480p"].includes(currentVal)) {
       qualitySelect.value = "best"; // sensible fallback
     }
   }
@@ -372,10 +391,14 @@ function updateQualityOptions() {
 async function init() {
   setupElements();
   document.addEventListener("contextmenu", (event) => event.preventDefault());
-  appVersion = await getVersion();
+  // Version schnell, Rest parallel wo möglich (Instant-Start: UI zuerst)
+  try {
+    appVersion = await getVersion();
+  } catch { appVersion = "0.0.0"; }
   try {
     const savedLang = localStorage.getItem("language") || "de";
-    ($("language-select") as HTMLSelectElement).value = savedLang;
+    const langSel = document.getElementById("language-select") as HTMLSelectElement | null;
+    if (langSel) langSel.value = savedLang;
     await loadTranslations(savedLang);
     
     config = await invoke<AppConfig>("load_config");
@@ -396,6 +419,9 @@ async function init() {
     if (config.auto_scroll_log === undefined) config.auto_scroll_log = true;
     if (config.auto_scroll_tracks === undefined) config.auto_scroll_tracks = true;
     if (config.eco_mode === undefined) config.eco_mode = true;
+    if (config.sponsorblock_mode === undefined) config.sponsorblock_mode = "off";
+    if (config.sponsorblock_categories === undefined) config.sponsorblock_categories = "sponsor,selfpromo,interaction";
+    if (config.gpu_encoder === undefined) config.gpu_encoder = "auto";
 
     applyTheme();
     if (config.accent_color) {
@@ -407,15 +433,18 @@ async function init() {
     const taggingToggle = document.getElementById("auto-tagging-toggle") as HTMLInputElement;
     if (taggingToggle) taggingToggle.checked = config.auto_tagging;
 
-    updateRemoteStatus();
-    setupEcoMode();
-    
-    // Discord RPC Initialisierung
-    updateDiscordPresence("Ready to download", "Waiting for URLs...");
+    // SponsorBlock / GPU sync (neu verdrahtet)
+    const sbMode = document.getElementById("sponsorblock-mode-select") as HTMLSelectElement | null;
+    if (sbMode) sbMode.value = config.sponsorblock_mode || "off";
+    const sbCats = document.getElementById("sponsorblock-categories-input") as HTMLInputElement | null;
+    if (sbCats) sbCats.value = config.sponsorblock_categories || "sponsor,selfpromo,interaction";
+    const gpuSel = document.getElementById("gpu-encoder-select") as HTMLSelectElement | null;
+    if (gpuSel) gpuSel.value = config.gpu_encoder || "auto";
     
     if (config.language) {
       await loadTranslations(config.language);
-      (document.getElementById("language-select") as HTMLSelectElement).value = currentLang;
+      const langSel2 = document.getElementById("language-select") as HTMLSelectElement | null;
+      if (langSel2) langSel2.value = currentLang;
     }
   } catch (e) {
     log("⚠️ Config could not be loaded, using defaults", "warning");
@@ -426,15 +455,32 @@ async function init() {
   setupTauriListeners();
   setupTabs();
   renderQueue();
-  void syncRemoteQueue();
-  checkSystem();
+  // UI sofort bereit melden – Rest lazy im Hintergrund (Instant-Start)
   log(`🎵 SoundSync Downloader v${appVersion} ready`, "success");
   updateTrayStatus(_("ready"));
   window.setTimeout(showOnboardingIfNeeded, 700);
-  
-  // Auto-check for updates on startup
-  setTimeout(() => checkForUpdates(false), 2000);
-  setTimeout(() => autoUpdateYtdlp(), 3500);
+
+  const idle = (fn: () => void, ms: number) => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void };
+    if (typeof w.requestIdleCallback === "function") {
+      w.requestIdleCallback(fn, { timeout: ms + 2000 });
+    } else {
+      globalThis.setTimeout(fn, ms);
+    }
+  };
+  // Schwere Hintergrundtasks erst nach Idle – kein Startup-Block mehr
+  idle(() => { void syncRemoteQueue(); }, 1500);
+  idle(() => { void updateRemoteStatus(); }, 2000);
+  idle(() => { setupEcoMode(); }, 2500);
+  idle(() => {
+    if (config.discord_rpc) void updateDiscordPresence("Ready to download", "Waiting for URLs...");
+  }, 3000);
+  idle(() => { void checkSystem(false); }, 3500);
+  // Update-Checks nur noch manuell/opt-in: kein Auto-Download beim Start.
+  // checkForUpdates(false) läuft nur wenn Changelog nicht deaktiviert ist, stark verzögert.
+  if (!config.disable_changelog) {
+    window.setTimeout(() => checkForUpdates(false), 15000);
+  }
 }
 
 async function autoUpdateYtdlp() {
@@ -461,21 +507,20 @@ async function performSearch() {
 
   const resultsGrid = $("search-results");
   const searchType = typeSelect?.value === "playlists" ? "playlists" : "videos";
-  const label = searchType === "playlists" ? "Playlists" : "Tracks";
-  resultsGrid.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Suche ${label} nach "${query}"...</span></div>`;
+  resultsGrid.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>${escapeHtml(_("search_button"))} … ${escapeHtml(query)}</span></div>`;
 
   try {
     const command = searchType === "playlists" ? "search_playlists" : "search_videos";
     const info = await invoke<PlaylistInfo>(command, { query });
     renderResults(info.entries, resultsGrid, searchType);
   } catch (e) {
-    resultsGrid.innerHTML = `<div class="empty-state"><p class="status-text error">Fehler bei der Suche: ${e}</p></div>`;
+    resultsGrid.innerHTML = `<div class="empty-state"><p class="status-text error">${escapeHtml(_("error_occurred"))}: ${escapeHtml(String(e))}</p></div>`;
   }
 }
 
 async function loadTrending() {
   const resultsGrid = $("trending-results");
-  resultsGrid.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Top-Charts werden geladen...</span></div>`;
+  resultsGrid.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>${escapeHtml(_("loading_charts"))}</span></div>`;
 
   try {
     const info = await invoke<PlaylistInfo>("get_trending_videos");
@@ -485,14 +530,14 @@ async function loadTrending() {
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.5" opacity="0.8">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
-      <p class="status-text error" style="max-width: 400px; word-break: break-word;">Fehler beim Laden der Trends: ${e}</p>
+      <p class="status-text error" style="max-width: 400px; word-break: break-word;">${escapeHtml(_("error_occurred"))}: ${escapeHtml(String(e))}</p>
     </div>`;
   }
 }
 
 function renderResults(entries: PlaylistEntry[], container: HTMLElement, resultType: "videos" | "playlists" = "videos") {
   if (!entries || entries.length === 0) {
-    container.innerHTML = `<div class="empty-state"><p>Keine Ergebnisse gefunden.</p></div>`;
+    container.innerHTML = `<div class="empty-state"><p>${escapeHtml(_("queue_no_results"))}</p></div>`;
     return;
   }
 
@@ -512,11 +557,11 @@ function renderResults(entries: PlaylistEntry[], container: HTMLElement, resultT
         ${isPlaylist ? `<span class="result-duration">Playlist</span>` : ""}
       </div>
       <div class="result-info">
-        <h3 class="result-title" title="${entry.title}">${entry.title}</h3>
+        <h3 class="result-title" title="${escapeAttribute(entry.title)}">${escapeHtml(entry.title)}</h3>
         <span class="result-channel">${isPlaylist ? "YouTube Playlist" : "YouTube"}</span>
       </div>
       <div class="result-actions">
-        <button class="btn btn-small btn-primary btn-full download-result-btn" data-url="${entry.url}">
+        <button class="btn btn-small btn-primary btn-full download-result-btn" data-url="${escapeAttribute(entry.url)}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           ${isPlaylist ? "In Korb" : "Download"}
         </button>
@@ -555,7 +600,13 @@ function logKey(key: string, type: string = "info", vars: Record<string, string>
   log(_(key, vars), type);
 }
 
-async function updateDiscordPresence(details: string, state_msg: string) {
+let lastDiscordUpdate = 0;
+async function updateDiscordPresence(details: string, state_msg: string, force = false) {
+  // Throttle: max 1 Update / 5s (Progress-Events feuern mehrmals pro Sekunde x3 parallel)
+  const now = Date.now();
+  const important = force || /complete|finished|error|fehler|✅|❌/i.test(details + " " + state_msg);
+  if (!important && now - lastDiscordUpdate < 5000) return;
+  lastDiscordUpdate = now;
   try {
     await invoke("update_discord_presence", { details, stateMsg: state_msg });
     if (config.discord_rpc && !discordRpcLogged) {
@@ -672,8 +723,10 @@ async function checkForUpdates(manual: boolean = false) {
       logKey("log_update_check_failed", "warning");
     }
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Auf Updates prüfen`;
+    if (manual && btn && document.contains(btn)) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Auf Updates prüfen`;
+    }
   }
 }
 
@@ -710,8 +763,6 @@ function updateUI() {
     $("update-current-version").textContent = appVersion;
   }
   $("no-downloads-text").textContent = _("no_downloads_yet");
-  const dragDropText = maybeElement("drag-drop-text");
-  if (dragDropText) dragDropText.textContent = _("drag_drop_hint");
   $("log-search").setAttribute("placeholder", _("search_placeholder"));
   const autoUrlToggle = document.getElementById("auto-url-toggle") as HTMLInputElement;
   if (autoUrlToggle) autoUrlToggle.checked = config.auto_url_detection;
@@ -755,6 +806,12 @@ function setupEventListeners() {
     ($("accent-color-picker") as HTMLInputElement).value = config.accent_color || "#6c5ce7";
     const afterDownloadSelect = document.getElementById("after-download-select") as HTMLSelectElement | null;
     if (afterDownloadSelect) afterDownloadSelect.value = config.after_download || "nothing";
+    const sbMode = document.getElementById("sponsorblock-mode-select") as HTMLSelectElement | null;
+    if (sbMode) sbMode.value = config.sponsorblock_mode || "off";
+    const sbCats = document.getElementById("sponsorblock-categories-input") as HTMLInputElement | null;
+    if (sbCats) sbCats.value = config.sponsorblock_categories || "sponsor,selfpromo,interaction";
+    const gpuSel = document.getElementById("gpu-encoder-select") as HTMLSelectElement | null;
+    if (gpuSel) gpuSel.value = config.gpu_encoder || "auto";
   });
 
   on("accent-color-picker", "input", (e) => {
@@ -805,6 +862,12 @@ function setupEventListeners() {
     if (afterDownloadSelect) {
       config.after_download = afterDownloadSelect.value;
     }
+    const sbMode = document.getElementById("sponsorblock-mode-select") as HTMLSelectElement | null;
+    if (sbMode) config.sponsorblock_mode = sbMode.value;
+    const sbCats = document.getElementById("sponsorblock-categories-input") as HTMLInputElement | null;
+    if (sbCats) config.sponsorblock_categories = sbCats.value.trim() || "sponsor,selfpromo,interaction";
+    const gpuSel = document.getElementById("gpu-encoder-select") as HTMLSelectElement | null;
+    if (gpuSel) config.gpu_encoder = gpuSel.value;
     
     // Save configuration first to prevent race condition with Discord Rich Presence
     await saveConfigImmediate();
@@ -1196,25 +1259,6 @@ function setupEventListeners() {
     const active = trackList.querySelector(".track-card.active");
     if (active) active.scrollIntoView({ behavior: "smooth", block: "center" });
   });
-  // Drag and drop
-  const dropZone = maybeElement("drag-drop-zone");
-  if (dropZone) {
-    dropZone.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      dropZone.classList.add("drag-over");
-    });
-    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
-    dropZone.addEventListener("drop", (e) => {
-      e.preventDefault();
-      dropZone.classList.remove("drag-over");
-      const text = e.dataTransfer?.getData("text/plain");
-      if (text && (text.includes("youtube") || text.includes("soundcloud") || text.includes("youtu.be"))) {
-        urlInput.value = text;
-        updateDownloadBtnState();
-        logKey("log_url_dropped", "info", { url: text });
-      }
-    });
-  }
 
   // Keyboard shortcuts
   document.addEventListener("keydown", (e) => {
@@ -1509,9 +1553,10 @@ function isSupportedMediaUrl(url: string): boolean {
     return (
       host === "youtu.be" ||
       host.endsWith("youtube.com") ||
-      host.endsWith("music.youtube.com") ||
       host.endsWith("soundcloud.com") ||
-      host.endsWith("spotify.com")
+      host.endsWith("spotify.com") ||
+      host === "music.apple.com" ||
+      host.endsWith(".music.apple.com")
     );
   } catch {
     return false;
@@ -1538,12 +1583,36 @@ function hideDetectedUrlPrompt() {
   $("detected-url-banner").style.display = "none";
 }
 
-function useDetectedUrl() {
+async function useDetectedUrl() {
   if (!pendingDetectedUrl) return;
-  urlInput.value = pendingDetectedUrl;
+  const first = pendingDetectedUrl;
+  const rest = pendingDetectedUrls.filter((u) => u !== first);
+
+  // Läuft gerade ein Download? Dann das Feld nicht überschreiben → alles in den Korb
+  if (isDownloading) {
+    for (const url of [first, ...rest]) {
+      await addToQueue(url, "clipboard");
+    }
+    logKey("log_clipboard_urls_queued", "success", { count: String(rest.length + 1) });
+    hideDetectedUrlPrompt();
+    return;
+  }
+
+  // Erste URL ins Download-Feld einsetzen …
+  urlInput.value = first;
   updateDownloadBtnState();
-  logKey("log_url_accepted", "success", { url: pendingDetectedUrl });
+  // … und Downloader-Tab anzeigen, damit man das Feld auch sieht
+  document.querySelector<HTMLElement>('.tab-btn[data-tab="downloader-tab"]')?.click();
+  logKey("log_url_accepted", "success", { url: first });
   hideDetectedUrlPrompt();
+
+  // Übrige erkannte URLs gehen nicht verloren → ab in den Korb
+  for (const url of rest) {
+    await addToQueue(url, "clipboard");
+  }
+  if (rest.length > 0) {
+    logKey("log_clipboard_urls_queued", "success", { count: String(rest.length) });
+  }
 }
 
 async function addDetectedUrlsToQueue() {
@@ -1614,40 +1683,38 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
     return;
   }
 
-  // Check duplicate
+  // Check duplicate – non-blocking Tauri dialog statt window.prompt (Webview-sicher)
   const duplicateIndex = clipboardQueue.findIndex(item => item.url === url);
   if (duplicateIndex !== -1) {
-    const choice = window.prompt(
-      `${_("duplicate_queue_prompt")}\n\nskip = ${_("duplicate_skip")}\nreplace = ${_("duplicate_replace")}\nadd = ${_("duplicate_add")}`,
-      "skip"
-    )?.trim().toLowerCase();
-    if (!choice || choice === "skip") {
+    try {
+      const addAnyway = await confirm(
+        `${_("duplicate_queue_prompt")}\n\n${url}`,
+        { title: _("queue_title"), kind: "warning", okLabel: _("duplicate_add"), cancelLabel: _("duplicate_skip") }
+      );
+      if (!addAnyway) {
+        logKey("log_link_already_queued", "info", { url });
+        return;
+      }
+      // Altes Duplikat ersetzen, dann neu anhängen (kein Doppel-Eintrag)
+      clipboardQueue.splice(duplicateIndex, 1);
+    } catch {
       logKey("log_link_already_queued", "info", { url });
       return;
     }
-    if (choice === "replace") {
-      clipboardQueue.splice(duplicateIndex, 1);
-    } else if (choice !== "add") {
-      return;
-    }
   }
 
-  // Deduce a nice placeholder title
-  let inferredTitle = title || "";
-  if (!inferredTitle) {
-    inferredTitle = await fetchQueueTitle(url);
-  }
-
-  clipboardQueue.push({
+  // Optimistisch hinzufügen (kein Block durch Metadaten-Lookup), Titel async nachladen
+  const newItem: QueueItem = {
     id: createQueueId(),
     url,
-    title: inferredTitle,
+    title: title || fallbackQueueTitle(url),
     source,
     sourceType: detectQueueSourceType(url),
     status: "queued",
     addedAt: Date.now(),
-  });
-  logKey("log_link_added_queue", "success", { title: inferredTitle });
+  };
+  clipboardQueue.push(newItem);
+  logKey("log_link_added_queue", "success", { title: newItem.title });
   
   // Play dynamic scale animation on queue badge
   if (queueBadge) {
@@ -1662,6 +1729,33 @@ async function addToQueue(url: string, source: "clipboard" | "extension" | "manu
 
   saveQueue();
   renderQueue();
+
+  // Titel im Hintergrund nachladen (nur wenn kein expliziter Titel übergeben wurde)
+  if (!title) {
+    const itemId = newItem.id;
+    void fetchQueueTitle(url).then((fetched) => {
+      const item = clipboardQueue.find((q) => q.id === itemId);
+      if (item && item.title === newItem.title && fetched && fetched !== item.title) {
+        item.title = fetched;
+        saveQueue();
+        renderQueue();
+      }
+    });
+  }
+}
+
+function fallbackQueueTitle(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes("youtube.com") || host.includes("youtu.be")) return "YouTube Video / Musik";
+    if (host.includes("soundcloud.com")) return "SoundCloud Track";
+    if (host.includes("spotify.com")) return "Spotify Link";
+    if (host.includes("music.apple.com")) return "Apple Music Link";
+    return "Anderer Musik-Link";
+  } catch {
+    return "Musik-Link";
+  }
 }
 
 async function fetchQueueTitle(url: string): Promise<string> {
@@ -1676,17 +1770,7 @@ async function fetchQueueTitle(url: string): Promise<string> {
     // Fallback below keeps adding links responsive even when metadata lookup fails.
   }
 
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.toLowerCase();
-    if (host.includes("youtube.com") || host.includes("youtu.be")) return "YouTube Video / Musik";
-    if (host.includes("soundcloud.com")) return "SoundCloud Track";
-    if (host.includes("spotify.com")) return "Spotify Link";
-    if (host.includes("music.apple.com")) return "Apple Music Link";
-    return "Anderer Musik-Link";
-  } catch {
-    return "Musik-Link";
-  }
+  return fallbackQueueTitle(url);
 }
 
 function renderQueue() {
@@ -1763,14 +1847,14 @@ function renderQueue() {
       <div class="queue-card-source ${sourceClass}">
          ${sourceIcon}
       </div>
-      <div class="queue-card-info">
-         <input type="text" class="queue-card-title-input" value="${escapeHtml(item.title)}" placeholder="Titel bearbeiten..." />
+       <div class="queue-card-info">
+         <input type="text" class="queue-card-title-input" value="${escapeAttribute(item.title)}" placeholder="${escapeAttribute(_("queue_manual_input_placeholder"))}" />
          <div class="queue-card-meta">
             <span class="queue-source-badge ${sourceClass}">${sourceLabel}</span>
             <span class="queue-status-badge ${item.status}">${_("queue_status_" + item.status)}</span>
             <span>${new Date(item.addedAt).toLocaleString()}</span>
          </div>
-         <span class="queue-card-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</span>
+         <span class="queue-card-url" title="${escapeAttribute(item.url)}">${escapeHtml(item.url)}</span>
       </div>
       <div class="queue-card-actions">
          <button class="queue-card-remove" title="Aus Korb löschen" data-idx="${realIdx}">
@@ -1807,6 +1891,10 @@ function clearQueue() {
 
 function startBatchDownload() {
   if (clipboardQueue.length === 0) return;
+  if (!config.download_folder) {
+    log(_("folder_placeholder") || "Bitte zuerst einen Zielordner wählen", "warning");
+    return;
+  }
 
   logKey("log_batch_started", "info", { count: String(clipboardQueue.length) });
 
@@ -1816,13 +1904,14 @@ function startBatchDownload() {
   saveQueue();
   renderQueue();
 
-  // Map to playlist entries
+  // Map to playlist entries – mit queueId für eindeutiges Status-Mapping (Duplikat-URLs!)
   playlistEntries = itemsToDownload.map((item, idx) => ({
     title: item.title,
     url: item.url,
     thumbnail: null,
     duration: null,
-    index: idx + 1
+    index: idx + 1,
+    queueId: item.id,
   }));
 
   // Set mode flag and visual settings
@@ -1919,8 +2008,12 @@ async function importPlaylist(url: string, source: "clipboard" | "extension" | "
 
 // ─── Download Logic ──────────────────────────────────────────────────────────
 async function startDownload() {
-  let url = urlInput.value.trim();
-  if (!url || !config.download_folder) return;
+  const url = urlInput.value.trim();
+  if (!url || !config.download_folder) {
+    // Kein hängendes Batch-Flag bei Early-Return
+    isBatchQueueMode = false;
+    return;
+  }
   if (isBatchQueueMode) {
     lastFailedAction = () => startBatchDownload();
   } else {
@@ -1994,7 +2087,10 @@ async function startDownload() {
       // Create the task promise
       const task = (async () => {
         if (!isDownloading) return;
-        if (card) card.classList.add("active");
+        if (card) {
+          card.classList.add("active");
+          if (config.auto_scroll_tracks !== false) scrollTrackIntoView(card);
+        }
 
         try {
           await invoke("download_track", {
@@ -2016,7 +2112,9 @@ async function startDownload() {
             if (bar) { bar.style.width = "100%"; bar.style.background = "var(--success)"; }
             if (stat) stat.textContent = "✅";
           }
-          const queueItem = clipboardQueue.find(item => item.url === entry.url);
+          const queueItem = clipboardQueue.find(item =>
+            (entry.queueId && item.id === entry.queueId) || (!entry.queueId && item.url === entry.url)
+          );
           if (queueItem) {
             queueItem.status = "done";
             saveQueue();
@@ -2025,7 +2123,9 @@ async function startDownload() {
         } catch (e) {
           if (!isDownloading) return;
           logErrorDetails(e, entry.title);
-          const queueItem = clipboardQueue.find(item => item.url === entry.url);
+          const queueItem = clipboardQueue.find(item =>
+            (entry.queueId && item.id === entry.queueId) || (!entry.queueId && item.url === entry.url)
+          );
           if (queueItem) {
             queueItem.status = "error";
             saveQueue();
@@ -2130,17 +2230,31 @@ function loadQueue() {
     const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
     if (!raw) return;
     const loaded = JSON.parse(raw) as Partial<QueueItem>[];
+    let repaired = 0;
     clipboardQueue = loaded
       .filter(item => item.url && item.title)
-      .map(item => ({
-        id: item.id || createQueueId(),
-        url: item.url!,
-        title: item.title!,
-        source: item.source || "manual",
-        sourceType: item.sourceType || detectQueueSourceType(item.url!),
-        status: item.status || "queued",
-        addedAt: item.addedAt || Date.now(),
-      }));
+      .map(item => {
+        // Abgebrochene/neu gestartete Sessions: downloading → queued (kein ewiges Hängen)
+        let status = item.status || "queued";
+        if (status === "downloading") {
+          status = "queued";
+          repaired++;
+        }
+        return {
+          id: item.id || createQueueId(),
+          url: item.url!,
+          title: item.title!,
+          source: item.source || "manual",
+          sourceType: item.sourceType || detectQueueSourceType(item.url!),
+          status,
+          addedAt: item.addedAt || Date.now(),
+        };
+      });
+    if (repaired > 0) {
+      try {
+        localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(clipboardQueue));
+      } catch { /* ignore */ }
+    }
   } catch (e) {
     console.warn("Could not load queue:", e);
     clipboardQueue = [];
@@ -2188,6 +2302,19 @@ function getVisibleQueueItems(): QueueItem[] {
 
 async function cancelDownload() {
   downloadRunId++;
+  // Hängende Queue-Einträge zurücksetzen
+  let queueRepaired = false;
+  clipboardQueue.forEach(item => {
+    if (item.status === "downloading") {
+      item.status = "queued";
+      queueRepaired = true;
+    }
+  });
+  if (queueRepaired) {
+    saveQueue();
+    renderQueue();
+  }
+  isBatchQueueMode = false;
   
   // UI sofort zurücksetzen für besseres Feedback
   setDownloadUiState(false);
@@ -2388,7 +2515,7 @@ function setDownloadUiState(downloading: boolean) {
   (getEl("convert-btn") as HTMLButtonElement).disabled = downloading;
   if (!downloading) setDownloadPaused(false);
   updateDownloadBtnState();
-  updateTrayStatus(downloading ? _("downloading") : _("ready"));
+  updateTrayStatus(downloading ? _("downloading", { title: urlInput?.value || "…", current: completedTracks, total: totalTracks || "…" }) : _("ready"));
 }
 
 function setDownloadPaused(paused: boolean) {
@@ -2399,7 +2526,7 @@ function setDownloadPaused(paused: boolean) {
   if (text) text.textContent = paused ? _("resume_download") : _("pause_download");
   if (pauseIcon) pauseIcon.style.display = paused ? "none" : "";
   if (playIcon) playIcon.style.display = paused ? "" : "none";
-  if (isDownloading) updateTrayStatus(paused ? _("download_paused") : _("downloading"));
+  if (isDownloading) updateTrayStatus(paused ? _("download_paused") : _("downloading", { title: urlInput?.value || "…", current: completedTracks, total: totalTracks || "…" }));
 }
 
 function resetProgress() {
@@ -2520,7 +2647,16 @@ function addTrackCard(entry: PlaylistEntry) {
 function escapeHtml(text: string): string {
   const div = document.createElement("div");
   div.textContent = text;
-  return div.innerHTML;
+  return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function escapeAttribute(text: string): string {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function toggleTheme() {

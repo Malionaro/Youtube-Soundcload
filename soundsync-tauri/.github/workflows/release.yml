@@ -33,12 +33,14 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libwebkit2gtk-4.0-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: install frontend dependencies
+        working-directory: soundsync-tauri
         run: npm install
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          projectPath: soundsync-tauri
           tagName: v__VERSION__ # tauri-action replaces this with the version from tauri.conf.json
           releaseName: "SoundSync Downloader v__VERSION__"
           releaseBody: "See CHANGELOG.md for details."

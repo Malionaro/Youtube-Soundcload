@@ -1037,6 +1037,42 @@
     </footer>
 
     <script>
+        // Vom Server injiziert (server.rs ersetzt __REMOTE_TOKEN__ beim Ausliefern).
+        // Fällt auf ?token= in der URL zurück (z.B. manuell geteilter Link).
+        window.__REMOTE_TOKEN__ = "__REMOTE_TOKEN__";
+        function remoteToken() {
+            const w = window.__REMOTE_TOKEN__;
+            if (w && w !== "__REMOTE_TOKEN__") return w;
+            try {
+                const t = new URLSearchParams(location.search).get("token");
+                if (t) return t;
+            } catch {}
+            try {
+                return localStorage.getItem("soundsync_remote_token") || "";
+            } catch { return ""; }
+        }
+        function authHeaders(extra) {
+            const h = Object.assign({}, extra || {});
+            const t = remoteToken();
+            if (t) h["Authorization"] = "Bearer " + t;
+            return h;
+        }
+        function authUrl(path) {
+            const t = remoteToken();
+            if (!t) return path;
+            return path + (path.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(t);
+        }
+        async function authFetch(path, options) {
+            const opts = Object.assign({}, options || {});
+            opts.headers = authHeaders(opts.headers);
+            // Token zusätzlich als Query (falls Header unterwegs verloren gehen)
+            try {
+                const saved = remoteToken();
+                if (saved) localStorage.setItem("soundsync_remote_token", saved);
+            } catch {}
+            return fetch(authUrl(path), opts);
+        }
+
         // Init Lucide Icons
         lucide.createIcons();
 
@@ -1193,7 +1229,7 @@
 
         async function syncRemoteLanguage() {
             try {
-                const res = await fetch("/remote-config");
+                const res = await authFetch("/remote-config");
                 if (!res.ok) return;
                 const data = await res.json();
                 const nextLang = remoteTranslations[data.language] ? data.language : "en";
@@ -1247,7 +1283,7 @@
 
             sendBtn.disabled = true;
             try {
-                const response = await fetch("/send", {
+                const response = await authFetch("/send", {
                     method: "POST",
                     headers: {
                         'Content-Type': 'application/json'
@@ -1273,7 +1309,7 @@
         // Status Poller
         async function pollStatus() {
             try {
-                const res = await fetch("/status");
+                const res = await authFetch("/status");
                 if (!res.ok) return;
                 
                 const data = await res.json();
@@ -1321,7 +1357,7 @@
 
         async function loadQueue() {
             try {
-                const res = await fetch("/queue");
+                const res = await authFetch("/queue");
                 if (!res.ok) return;
                 const queue = await res.json();
                 renderQueue(queue);
@@ -1369,7 +1405,7 @@
 
         async function loadFiles() {
             try {
-                const res = await fetch("/files");
+                const res = await authFetch("/files");
                 if (!res.ok) return;
                 const files = await res.json();
                 globalFilesList = files;
@@ -1436,7 +1472,7 @@
                 delBtn.onclick = async () => {
                     if (confirm(t("delete_confirm", { file }))) {
                         try {
-                            const res = await fetch("/delete/" + encodeURIComponent(file), { method: "DELETE" });
+                            const res = await authFetch("/delete/" + encodeURIComponent(file), { method: "DELETE" });
                             if (res.ok) {
                                 if (currentFilePlaying === file) {
                                     audioPlayer.pause();
@@ -1469,7 +1505,7 @@
             playerTitle.textContent = filename;
             playerArt.classList.add("playing");
 
-            audioPlayer.src = "/download/" + encodeURIComponent(filename);
+            audioPlayer.src = authUrl("/download/" + encodeURIComponent(filename));
             audioPlayer.play();
             
             updatePlayBtnIcon(true);

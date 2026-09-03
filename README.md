@@ -1,3 +1,36 @@
+# SoundSync Downloader
+
+Tauri v2 Desktop-App (TypeScript + Rust) zum Laden von YouTube / SoundCloud / Spotify / Apple-Music-Links via `yt-dlp` + `ffmpeg`. Mit Sammelkorb-Queue, Browser-Extension (`soundsync-extension/`) und Handy-Remote (`http://<pc-ip>:3030`).
+
+## Start (Dev)
+
+```powershell
+cd soundsync-tauri
+npm install
+npm run tauri dev
+```
+
+Voraussetzungen: Node 20+, Rust stable, `ffmpeg` + `yt-dlp` (prüft die App beim Start im System-Check, Install per winget möglich).
+
+## Build
+
+```powershell
+cd soundsync-tauri
+npm run build
+npm run build:tauri
+```
+
+## Remote / Extension
+
+- Remote-Seite: `http://<pc-ip>:3030` (QR in Einstellungen). LAN-Zugriff ist per Token geschützt (wird serverseitig in die Seite injiziert); `localhost` (Extension) braucht kein Token.
+- Extension laden: `chrome://extensions` → Entwicklermodus → `soundsync-extension/` als entpackte Extension laden.
+
+## Config
+
+Echte `config.json` / `cookies.txt` nie committen. Vorlage: `config.example.json`. Die App speichert die Config unter `%APPDATA%\com.malo.soundsync.downloader.v2\config.json` (Windows).
+
+---
+
 ## Disclaimer & Legal Notice
 
 This project may reference or demonstrate the use of tools such as YouTube audio downloaders or services like Soundload and tone downloader utilities. These tools can be used to extract audio from online video platforms for various personal applications.
@@ -28,8 +61,8 @@ This is often a **false positive** caused by how compiled executables or auto-up
 > **This program does not contain any malicious code.**
 
 To avoid issues:
-- Temporarily **disable your antivirus** during the update,  
-- or **add this program as an exception** in your antivirus settings.
+- **Do NOT disable your antivirus.** If flagged, verify the file hash from the GitHub release page,
+- add this program as an exception in your antivirus settings only after verifying the download source.
 
 Always download the program from this official GitHub repository only.
 

@@ -1,3 +1,20 @@
+----------------------------**V2.4.0**----------------------------
+
+**New Features:**
+- **Instant-Start:** The UI is ready immediately on launch. Heavy background tasks (system check, remote QR, Discord RPC, update check) now run deferred via idle callbacks – no more blocking `yt-dlp` auto-update on startup.
+- **SponsorBlock & GPU Settings UI:** The announced SponsorBlock mode/categories and GPU encoder options are now actually visible in Settings and wired up – SponsorBlock flags (`--sponsorblock-mark/remove`) are passed to `yt-dlp` for YouTube URLs.
+- **Smarter "Link Detected" Flow:** Confirming a detected link puts it visibly into the download field and jumps to the Downloader tab. Extra links from multi-detection go to the queue instead of being lost; while a download is running, everything goes to the queue so nothing gets overwritten.
+- **Secured Remote Control:** LAN access to the phone remote (`:3030`) is now token-protected. The token is injected server-side into the page, so loopback (browser extension) keeps working without setup and file download/delete endpoints are safe from path traversal.
+- **Extension Robustness:** Automatic `localhost`/`127.0.0.1` fallback, request timeouts, action-badge feedback, plus Spotify and Apple Music link support.
+
+**Bug Fixes & Improvements:**
+- **Config That Survives:** App config now lives in `%APPDATA%` (no more permission errors under `Program Files`), corrupt configs are backed up (`*.corrupt.bak`) instead of silently reset, and format/scroll settings are actually persisted.
+- **Queue Reliability:** Batch items are matched by ID (duplicate URLs no longer confuse statuses), stuck `downloading` states repair to `queued` on start/cancel, duplicate handling uses a native dialog instead of `window.prompt`, and adding links no longer blocks on metadata lookup.
+- **Installer & Tools:** `yt-dlp` updates use `winget upgrade` first (no more false "already installed"), shutdown/lock-after-download now works on Linux/macOS too, and the manual updater no longer quits the app on Linux/macOS without installing.
+- **Small Fixes:** XSS-safe escaping of track titles/URLs, throttled Discord presence, Apple Music URL detection, completed translations (incl. missing `select_bg`), unified GitHub repo links, hardened capabilities, fixed release workflow paths, and removed the unused drag & drop zone.
+
+---
+
 ----------------------------**V2.3.20**----------------------------
 
 **New Features:**

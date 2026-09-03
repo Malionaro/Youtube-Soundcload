@@ -15,6 +15,10 @@ pub fn kill_process_tree(pid: u32) {
 
     #[cfg(not(target_os = "windows"))]
     {
+        // Erst Kinder beenden (pkill -P), dann Prozess selbst. Fehler ignorieren (best-effort).
+        let _ = Command::new("pkill")
+            .args(["-TERM", "-P", &pid.to_string()])
+            .output();
         let _ = Command::new("kill")
             .args(["-TERM", &pid.to_string()])
             .output();
@@ -59,7 +63,45 @@ pub fn format_winget_error(package: &str, code: Option<i32>, output: &str) -> St
     }
 }
 
+pub fn app_config_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("APPDATA")
+            .ok()
+            .map(|p| PathBuf::from(p).join("com.malo.soundsync.downloader.v2"))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var("HOME")
+            .ok()
+            .map(|p| PathBuf::from(p).join("Library/Application Support/com.malo.soundsync.downloader.v2"))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            if !xdg.is_empty() {
+                return Some(PathBuf::from(xdg).join("soundsync-downloader"));
+            }
+        }
+        std::env::var("HOME")
+            .ok()
+            .map(|p| PathBuf::from(p).join(".config/soundsync-downloader"))
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        None
+    }
+}
+
 pub fn get_config_path() -> PathBuf {
+    // 1. Bevorzugt: beschreibbares App-Config-Verzeichnis (funktioniert auch unter Program Files).
+    if let Some(dir) = app_config_dir() {
+        // Nur nutzen wenn wir es anlegen/beschreiben können
+        if std::fs::create_dir_all(&dir).is_ok() {
+            return dir.join("config.json");
+        }
+    }
+    // 2. Fallback: neben der Exe (portabler Modus / dev)
     let mut path = std::env::current_exe()
         .unwrap_or_else(|_| PathBuf::from("."))
         .parent()
@@ -77,8 +119,15 @@ pub fn check_tool(name: &str, args: &[&str]) -> (bool, String) {
 
     match cmd.output() {
         Ok(output) => {
-            let version_text = String::from_utf8_lossy(&output.stdout);
-            let first_line = version_text.lines().next().unwrap_or("unknown").to_string();
+            // stdout bevorzugen, stderr als Fallback (manche Tools schreiben Version nach stderr)
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let combined = if stdout.trim().is_empty() {
+                stderr.to_string()
+            } else {
+                stdout.to_string()
+            };
+            let first_line = combined.lines().next().unwrap_or("unknown").to_string();
             (output.status.success(), first_line)
         }
         Err(_) => (false, String::new()),

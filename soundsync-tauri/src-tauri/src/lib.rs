@@ -6,7 +6,7 @@ pub mod utils;
 pub mod commands;
 
 use models::AppState;
-use server::{ss_start_remote_server, ss_get_local_ip};
+use server::{ss_start_remote_server, ss_get_local_ip, ss_get_remote_token};
 use commands::*;
 
 use tauri::{
@@ -148,6 +148,7 @@ pub fn run() {
             open_folder,
             update_discord_presence,
             ss_get_local_ip,
+            ss_get_remote_token,
             ss_start_remote_server,
             download_and_install_update,
             search_videos,

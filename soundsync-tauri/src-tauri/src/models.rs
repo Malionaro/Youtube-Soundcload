@@ -14,6 +14,21 @@ pub struct AppState {
     pub discord_client: Mutex<Option<DiscordClient>>,
     pub current_progress: Mutex<Option<DownloadProgress>>,
     pub remote_queue: Mutex<Vec<RemoteQueueItem>>,
+    pub remote_token: Mutex<String>,
+}
+
+pub fn generate_remote_token() -> String {
+    // Kein extra Dep: Zeit + PID + Counter → hex. Gut genug für LAN-CSRF-Schutz.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let pid = std::process::id() as u128;
+    let c = COUNTER.fetch_add(1, Ordering::Relaxed) as u128;
+    let mixed = now ^ ((pid << 32) | (c & 0xffff_ffff));
+    format!("{:032x}", mixed.wrapping_mul(0x9e3779b97f4a7c15))
 }
 
 pub struct DiscordClient {
@@ -50,6 +65,10 @@ pub struct AppConfig {
     pub sponsorblock_categories: String,
     #[serde(default = "default_gpu_encoder")]
     pub gpu_encoder: String,
+    #[serde(default = "default_format")]
+    pub format: String,
+    #[serde(default = "default_true")]
+    pub auto_scroll_tracks: bool,
 }
 
 pub fn default_after_download() -> String {
@@ -66,6 +85,10 @@ pub fn default_sponsorblock_categories() -> String {
 
 pub fn default_gpu_encoder() -> String {
     "auto".to_string()
+}
+
+pub fn default_format() -> String {
+    "mp3".to_string()
 }
 
 pub fn default_auto_url_detection() -> bool {
@@ -100,6 +123,8 @@ impl Default for AppConfig {
             sponsorblock_mode: "off".to_string(),
             sponsorblock_categories: "sponsor,selfpromo,interaction".to_string(),
             gpu_encoder: "auto".to_string(),
+            format: "mp3".to_string(),
+            auto_scroll_tracks: true,
         }
     }
 }

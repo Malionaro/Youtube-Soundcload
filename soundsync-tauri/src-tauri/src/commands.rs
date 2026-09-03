@@ -62,10 +62,26 @@ pub fn load_config(state: State<AppState>) -> Result<AppConfig, String> {
     let config_path = get_config_path();
     if config_path.exists() {
         let content = fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
-        let config: AppConfig = serde_json::from_str(&content).unwrap_or_default();
-        let mut state_config = state.config.lock().unwrap();
-        *state_config = config.clone();
-        Ok(config)
+        match serde_json::from_str::<AppConfig>(&content) {
+            Ok(config) => {
+                let mut state_config = state.config.lock().unwrap();
+                *state_config = config.clone();
+                Ok(config)
+            }
+            Err(e) => {
+                // Korruptes JSON sichern statt still zu verwerfen
+                let backup = config_path.with_extension("json.corrupt.bak");
+                let _ = fs::write(&backup, &content);
+                let config = AppConfig::default();
+                let mut state_config = state.config.lock().unwrap();
+                *state_config = config.clone();
+                Err(format!(
+                    "Config korrupt (Backup: {}): {}. Defaults geladen.",
+                    backup.to_string_lossy(),
+                    e
+                ))
+            }
+        }
     } else {
         let config = AppConfig::default();
         let mut state_config = state.config.lock().unwrap();
@@ -132,7 +148,7 @@ pub async fn update_discord_presence(
         let assets = activity::Assets::new().large_image("logo");
         let buttons = vec![activity::Button::new(
             "Download",
-            "https://github.com/Malionaro/Johann-Youtube-Soundcload",
+            "https://github.com/Malionaro/Youtube-Soundcload",
         )];
         let activity = activity::Activity::new()
             .details(&details)
@@ -149,7 +165,7 @@ pub async fn update_discord_presence(
                 let assets = activity::Assets::new().large_image("logo");
                 let buttons = vec![activity::Button::new(
                     "Download",
-                    "https://github.com/Malionaro/Johann-Youtube-Soundcload",
+                    "https://github.com/Malionaro/Youtube-Soundcload",
                 )];
                 let activity = activity::Activity::new()
                     .details(&details)
@@ -572,6 +588,28 @@ pub async fn download_track(
             "--convert-thumbnails".to_string(),
             "jpg".to_string(),
         ]);
+    }
+
+    // SponsorBlock (nur YouTube, nur wenn nicht "off")
+    {
+        let cfg = state.config.lock().unwrap();
+        let mode = cfg.sponsorblock_mode.clone();
+        let cats = cfg.sponsorblock_categories.clone();
+        drop(cfg);
+        let is_youtube = url.contains("youtube.com") || url.contains("youtu.be") || url.contains("music.youtube.com");
+        if is_youtube && (mode == "mark" || mode == "remove") {
+            let cats = cats.trim();
+            let cats = if cats.is_empty() {
+                "sponsor,selfpromo,interaction".to_string()
+            } else {
+                cats.to_string()
+            };
+            if mode == "mark" {
+                args.extend(["--sponsorblock-mark".to_string(), cats]);
+            } else {
+                args.extend(["--sponsorblock-remove".to_string(), cats]);
+            }
+        }
     }
 
     args.push(url.clone());
@@ -1141,32 +1179,55 @@ pub async fn install_ffmpeg() -> Result<String, String> {
 pub async fn install_ytdlp() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
-        // Install or upgrade yt-dlp using winget
-        let mut cmd = Command::new("winget");
-        cmd.args([
-            "install",
-            "--id=yt-dlp.yt-dlp",
-            "-e",
-            "--silent",
-            "--accept-source-agreements",
-            "--accept-package-agreements",
-        ])
-        .creation_flags(0x08000000);
+        // Erst Upgrade versuchen (falls schon installiert), dann Install als Fallback.
+        // Reines `install` meldet sonst "already installed" statt zu upgraden.
+        for action in ["upgrade", "install"] {
+            let mut cmd = Command::new("winget");
+            cmd.args([
+                action,
+                "--id=yt-dlp.yt-dlp",
+                "-e",
+                "--silent",
+                "--accept-source-agreements",
+                "--accept-package-agreements",
+            ])
+            .creation_flags(0x08000000);
 
-        let output = cmd
-            .output()
-            .map_err(|e| format!("winget not available: {}", e))?;
+            let output = cmd
+                .output()
+                .map_err(|e| format!("winget not available: {}", e))?;
 
-        let output_text = command_output_text(&output);
-        if output.status.success() || winget_output_means_installed(&output_text) {
-            Ok("yt-dlp installed successfully".to_string())
-        } else {
-            Err(format_winget_error(
+            let output_text = command_output_text(&output);
+            if output.status.success() || winget_output_means_installed(&output_text) {
+                return Ok("yt-dlp installed successfully".to_string());
+            }
+            // Bei upgrade: "kein installiertes Paket gefunden" o.ä. → install versuchen
+            if action == "upgrade" {
+                let lower = output_text.to_lowercase();
+                if lower.contains("no installed package found")
+                    || lower.contains("kein installiertes paket")
+                    || lower.contains("not found")
+                    || lower.contains("nicht gefunden")
+                {
+                    continue;
+                }
+                // Anderer Upgrade-Fehler (z.B. kein Upgrade verfügbar) = bereits aktuell
+                if lower.contains("no available upgrade")
+                    || lower.contains("kein verfügbares upgrade")
+                    || lower.contains("kein verfugbares upgrade")
+                    || lower.contains("no newer package versions")
+                {
+                    return Ok("yt-dlp is up to date".to_string());
+                }
+                continue;
+            }
+            return Err(format_winget_error(
                 "yt-dlp",
                 output.status.code(),
                 &output_text,
-            ))
+            ));
         }
+        return Err("yt-dlp installation failed: winget upgrade+install both failed.".to_string());
     }
 
     #[cfg(target_os = "linux")]
@@ -1575,18 +1636,35 @@ pub async fn download_and_install_update(
                 .spawn()
                 .map_err(|e| format!("Failed to start installer: {}", e))?;
         }
+        // Exit the app after a short delay so the installer can replace the files (nur Windows!)
+        let handle = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            handle.exit(0);
+        });
+
+        return Ok("Installer started".to_string());
     }
     #[cfg(not(target_os = "windows"))]
-    let _ = client;
-
-    // Exit the app after a short delay so the installer can replace the files
-    let handle = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(2));
-        handle.exit(0);
-    });
-
-    Ok("Installer started".to_string())
+    {
+        // Kein stilles Beenden ohne Installation: Datei zum manuellen Installieren anbieten.
+        let path_str = client.to_string_lossy().to_string();
+        #[cfg(target_os = "macos")]
+        let _ = Command::new("open").arg(&path_str).spawn();
+        #[cfg(target_os = "linux")]
+        let _ = Command::new("xdg-open")
+            .arg(
+                client
+                    .parent()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or(path_str.clone()),
+            )
+            .spawn();
+        return Ok(format!(
+            "Update heruntergeladen ({}). Bitte manuell installieren – die App wurde NICHT beendet.",
+            path_str
+        ));
+    }
 }
 
 #[tauri::command]
@@ -1625,15 +1703,54 @@ pub fn execute_after_download_action(action: String) -> Result<(), String> {
             _ => {}
         }
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
+    {
+        match action.as_str() {
+            "shutdown" => {
+                Command::new("systemctl")
+                    .args(["poweroff"])
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            }
+            "lock" => {
+                // loginctl funktioniert auf den meisten Desktops (GNOME/KDE/systemd)
+                Command::new("loginctl")
+                    .args(["lock-session"])
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            }
+            _ => {}
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        match action.as_str() {
+            "shutdown" => {
+                Command::new("osascript")
+                    .args(["-e", "tell app \"System Events\" to shut down"])
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            }
+            "lock" => {
+                Command::new("/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession")
+                    .args(["-suspend"])
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+            }
+            _ => {}
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     let _ = action;
     Ok(())
 }
 
 #[tauri::command]
 pub fn update_tray_status(app: AppHandle, status: String) -> Result<(), String> {
+    // Tooltip-Länge begrenzen (Windows schneidet bei ~128 Zeichen ab)
+    let short: String = status.chars().take(100).collect();
     if let Some(tray) = app.tray_by_id("main-tray") {
-        tray.set_tooltip(Some(format!("SoundSync Downloader - {}", status)))
+        tray.set_tooltip(Some(format!("SoundSync Downloader - {}", short)))
             .map_err(|e| e.to_string())?;
     }
     Ok(())
