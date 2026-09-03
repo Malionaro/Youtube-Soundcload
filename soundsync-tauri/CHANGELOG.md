@@ -1,3 +1,10 @@
+----------------------------**V2.5.1**----------------------------
+
+**Bug Fixes:**
+- **Settings Layout Fix:** The SponsorBlock categories row in Settings had an overlong title running into the input field – it now uses a short label with the examples as description and placeholder. Text wrapping in all settings rows hardened, so long translations can no longer overlap controls.
+
+---
+
 ----------------------------**V2.5.0**----------------------------
 
 **New Features:**

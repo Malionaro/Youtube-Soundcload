@@ -268,6 +268,7 @@
   "sponsorblock_mark": "Mark as chapters",
   "sponsorblock_remove": "Remove segments",
   "sponsorblock_categories_hint": "Comma-separated categories, e.g. sponsor,selfpromo,interaction,intro,outro,preview",
+  "sponsorblock_categories_label": "SponsorBlock categories",
   "gpu_encoder_label": "GPU encoding",
   "gpu_encoder_desc": "Choose the FFmpeg hardware encoder for video conversion if your GPU supports it.",
   "gpu_encoder_auto": "Auto / FFmpeg default",

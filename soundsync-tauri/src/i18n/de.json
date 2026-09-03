@@ -268,6 +268,7 @@
   "sponsorblock_mark": "Als Kapitel markieren",
   "sponsorblock_remove": "Segmente entfernen",
   "sponsorblock_categories_hint": "Kategorien als Komma-Liste, z.B. sponsor,selfpromo,interaction,intro,outro,preview",
+  "sponsorblock_categories_label": "SponsorBlock-Kategorien",
   "gpu_encoder_label": "GPU-Encoding",
   "gpu_encoder_desc": "Wähle den FFmpeg-Hardware-Encoder für Video-Konvertierung, wenn deine GPU ihn unterstützt.",
   "gpu_encoder_auto": "Auto / FFmpeg Standard",

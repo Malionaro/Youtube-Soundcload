@@ -1149,16 +1149,26 @@ input:checked + .toggle-track::after {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  min-width: 0;
+  margin-right: 12px;
 }
 
 .setting-info strong {
   font-size: 14px;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .setting-info span {
   font-size: 12px;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.setting-item .select-input,
+.setting-item .text-input {
+  flex-shrink: 0;
 }
 
 .modal-footer-actions {
