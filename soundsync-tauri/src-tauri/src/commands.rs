@@ -331,8 +331,6 @@ pub async fn get_playlist_info(
         "--no-warnings".to_string(),
         "-i".to_string(),
         "--no-color".to_string(),
-        "--extractor-args".to_string(),
-        "youtube:player_client=android".to_string(),
     ];
     #[cfg(target_os = "windows")]
     args.push("--windows-filenames".to_string());
@@ -525,8 +523,10 @@ pub async fn download_track(
         "--progress".to_string(),
         "-o".to_string(),
         format!("{}/%(title)s.%(ext)s", folder),
-        "--extractor-args".to_string(),
-        "youtube:player_client=android".to_string(), // Bypass some DRM
+        "--retries".to_string(),
+        "10".to_string(),
+        "--fragment-retries".to_string(),
+        "10".to_string(),
         "--postprocessor-args".to_string(),
         "ffmpeg:-threads 0".to_string(),
     ];
@@ -576,18 +576,27 @@ pub async fn download_track(
     if let Some(ref cp) = cookies {
         if !cp.is_empty() && std::path::Path::new(cp).exists() {
             args.extend(["--cookies".to_string(), cp.clone()]);
+        } else if !cp.is_empty() {
+            let _ = app.emit(
+                "download-log",
+                format!("WARNING: Cookies-Datei nicht gefunden, wird ignoriert: {}", cp),
+            );
         }
     }
 
     // AI Tagging & Metadata
     let auto_tagging = { state.config.lock().unwrap().auto_tagging };
     if auto_tagging {
-        args.extend([
-            "--embed-metadata".to_string(),
-            "--embed-thumbnail".to_string(),
-            "--convert-thumbnails".to_string(),
-            "jpg".to_string(),
-        ]);
+        args.push("--embed-metadata".to_string());
+        // Thumbnails cannot be embedded into these containers; yt-dlp fails otherwise
+        let no_thumb_formats = ["wav", "aiff", "aac", "wma", "alac"];
+        if !no_thumb_formats.contains(&format.as_str()) {
+            args.extend([
+                "--embed-thumbnail".to_string(),
+                "--convert-thumbnails".to_string(),
+                "jpg".to_string(),
+            ]);
+        }
     }
 
     // SponsorBlock (nur YouTube, nur wenn nicht "off")
@@ -640,7 +649,27 @@ pub async fn download_track(
 
         let mut downloaded_paths: Vec<String> = Vec::new();
         let mut already_downloaded = false;
-        let mut stderr_tail: Vec<String> = Vec::new();
+
+        // Drain stderr in parallel; reading it only after stdout can deadlock
+        // when yt-dlp fills the stderr pipe buffer with warnings.
+        let stderr_handle = child.stderr.take().map(|stderr| {
+            let app_handle = app_handle.clone();
+            std::thread::spawn(move || {
+                let mut tail: Vec<String> = Vec::new();
+                let reader = std::io::BufReader::new(stderr);
+                for line in reader.lines().flatten() {
+                    let trimmed = line.trim();
+                    let _ = app_handle.emit("download-log", trimmed.to_string());
+                    if !trimmed.is_empty() {
+                        tail.push(trimmed.to_string());
+                        if tail.len() > 8 {
+                            tail.remove(0);
+                        }
+                    }
+                }
+                tail
+            })
+        });
 
         if let Some(stdout) = child.stdout.take() {
             let reader = std::io::BufReader::new(stdout);
@@ -782,24 +811,10 @@ pub async fn download_track(
             }
         }
 
-        // Check stderr for errors
-        if let Some(stderr) = child.stderr.take() {
-            let reader = std::io::BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    let trimmed = line.trim();
-                    let _ = app_handle.emit("download-log", trimmed.to_string());
-                    if !trimmed.is_empty() {
-                        stderr_tail.push(trimmed.to_string());
-                        if stderr_tail.len() > 8 {
-                            stderr_tail.remove(0);
-                        }
-                    }
-                }
-            }
-        }
-
         let status = child.wait();
+        let stderr_tail: Vec<String> = stderr_handle
+            .and_then(|h| h.join().ok())
+            .unwrap_or_default();
         {
             let mut pids = active_download_pids.lock().unwrap();
             pids.retain(|pid| *pid != child_id);
