@@ -42,8 +42,8 @@ say "Server: $SERVER_IP   Advertised: $ADVERTISED   Port: $PORT"
 
 # ── Abhängigkeiten ───────────────────────────────────────────────────────────
 if have apt-get; then
-  $SUDO apt-get update -y
-  $SUDO apt-get install -y curl ca-certificates git build-essential
+  $SUDO apt-get update -y || true
+  $SUDO apt-get install -y curl ca-certificates git build-essential || true
 elif have dnf; then
   $SUDO dnf install -y curl ca-certificates git gcc make
 elif have pacman; then
@@ -132,7 +132,7 @@ if [ "$WITH_CADDY" = "1" ]; then
   if have apt-get; then
     curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | $SUDO tee /usr/share/keyrings/caddy-stable-archive-keyring.gpg >/dev/null
     curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt | $SUDO tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
-    $SUDO apt-get update -y; $SUDO apt-get install -y caddy
+    $SUDO apt-get update -y || true; $SUDO apt-get install -y caddy
   fi
   $SUDO tee /etc/caddy/Caddyfile >/dev/null <<EOF
 $CADDY_ADDR {
