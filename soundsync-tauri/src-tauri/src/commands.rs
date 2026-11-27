@@ -345,7 +345,7 @@ pub async fn get_playlist_info(
     args.push(resolved_url.clone());
 
     let output = tokio::task::spawn_blocking(move || {
-        let mut cmd = Command::new("yt-dlp");
+        let mut cmd = Command::new(resolve_tool("yt-dlp"));
         cmd.args(&args);
         #[cfg(target_os = "windows")]
         cmd.creation_flags(0x08000000);
@@ -637,7 +637,7 @@ pub async fn download_track(
         use std::process::Stdio;
 
         #[allow(unused_mut)]
-        let mut cmd = Command::new("yt-dlp");
+        let mut cmd = Command::new(resolve_tool("yt-dlp"));
         cmd.args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -1081,7 +1081,7 @@ pub async fn convert_file(app: AppHandle, state: State<'_, AppState>, request: C
         use std::process::Stdio;
 
         #[allow(unused_mut)]
-        let mut cmd = Command::new("ffmpeg");
+        let mut cmd = Command::new(resolve_tool("ffmpeg"));
         cmd.args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -1150,35 +1150,87 @@ pub async fn convert_file(app: AppHandle, state: State<'_, AppState>, request: C
     Ok("Conversion started".to_string())
 }
 
+/// Portable FFmpeg ohne winget herunterladen (kostenlos) + PATH.
+#[cfg(target_os = "windows")]
+async fn install_ffmpeg_portable() -> Result<String, String> {
+    use std::io::{Read, Write};
+    let dir = tools_dir();
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let zip_path = dir.join("ffmpeg-download.zip");
+    let extract_dir = dir.join("ffmpeg-extract");
+    let _ = fs::remove_dir_all(&extract_dir);
+
+    let url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip".to_string();
+    let zip_clone = zip_path.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let resp = ureq::get(&url).timeout(std::time::Duration::from_secs(180)).call().map_err(|e| format!("FFmpeg-Download fehlgeschlagen: {}", e))?;
+        let mut reader = resp.into_reader();
+        let mut file = fs::File::create(&zip_clone).map_err(|e| e.to_string())?;
+        let mut buf = [0u8; 16384];
+        loop { let n = reader.read(&mut buf).map_err(|e| e.to_string())?; if n == 0 { break; } file.write_all(&buf[..n]).map_err(|e| e.to_string())?; }
+        Ok(())
+    }).await.map_err(|e| e.to_string())??;
+
+    // entpacken (Windows tar = bsdtar kann zip; sonst PowerShell)
+    let extract_ok = Command::new("tar").args(["-xf", &zip_path.to_string_lossy(), "-C", &extract_dir.to_string_lossy()]).output().map(|o| o.status.success()).unwrap_or(false);
+    let _ = extract_ok;
+    if !extract_dir.exists() { fs::create_dir_all(&extract_dir).map_err(|e| e.to_string())?; }
+    let _ = Command::new("powershell").args(["-NoProfile","-Command",&format!("Expand-Archive -Force -LiteralPath '{}' -DestinationPath '{}'", zip_path.to_string_lossy(), extract_dir.to_string_lossy())]).creation_flags(0x08000000).output();
+
+    // ffmpeg.exe / ffprobe.exe finden + ins tools_dir kopieren
+    let mut found_ffmpeg = false;
+    fn find_and_copy(dir: &std::path::Path, target: &std::path::Path, found: &mut bool) {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() { find_and_copy(&p, target, found); }
+                else if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
+                    if name.eq_ignore_ascii_case("ffmpeg.exe") { let _ = fs::copy(&p, target.join("ffmpeg.exe")); *found = true; }
+                    if name.eq_ignore_ascii_case("ffprobe.exe") { let _ = fs::copy(&p, target.join("ffprobe.exe")); }
+                }
+            }
+        }
+    }
+    find_and_copy(&extract_dir, &dir, &mut found_ffmpeg);
+
+    let _ = fs::remove_file(&zip_path);
+    let _ = fs::remove_dir_all(&extract_dir);
+
+    if found_ffmpeg {
+        add_tools_to_path();
+        Ok("Portables FFmpeg heruntergeladen + eingerichtet.".to_string())
+    } else {
+        Err("FFmpeg konnte nicht entpackt werden. Bitte manuell installieren (winget install Gyan.FFmpeg).".to_string())
+    }
+}
+
 #[tauri::command]
 pub async fn install_ffmpeg() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
-        let mut cmd = Command::new("winget");
-        cmd.args([
-            "install",
-            "--id=Gyan.FFmpeg",
-            "-e",
-            "--silent",
-            "--accept-source-agreements",
-            "--accept-package-agreements",
-        ])
-        .creation_flags(0x08000000);
+        // Bevorzugt winget, Fallback = portable FFmpeg herunterladen
+        if winget_available() {
+            let mut cmd = Command::new("winget");
+            cmd.args([
+                "install",
+                "--id=Gyan.FFmpeg",
+                "-e",
+                "--silent",
+                "--accept-source-agreements",
+                "--accept-package-agreements",
+            ])
+            .creation_flags(0x08000000);
 
-        let output = cmd
-            .output()
-            .map_err(|e| format!("winget not available: {}", e))?;
-
-        let output_text = command_output_text(&output);
-        if output.status.success() || winget_output_means_installed(&output_text) {
-            Ok("FFmpeg ist bereits installiert oder wurde erfolgreich installiert.".to_string())
-        } else {
-            Err(format_winget_error(
-                "FFmpeg",
-                output.status.code(),
-                &output_text,
-            ))
+            if let Ok(output) = cmd.output() {
+                let output_text = command_output_text(&output);
+                if output.status.success() || winget_output_means_installed(&output_text) {
+                    add_tools_to_path();
+                    return Ok("FFmpeg ist bereits installiert oder wurde erfolgreich installiert.".to_string());
+                }
+            }
         }
+        // Fallback ohne winget
+        install_ffmpeg_portable().await
     }
 
     #[cfg(target_os = "linux")]
@@ -1202,10 +1254,39 @@ pub async fn install_ffmpeg() -> Result<String, String> {
     }
 }
 
+/// Portables yt-dlp ohne winget herunterladen + PATH.
+#[cfg(target_os = "windows")]
+async fn install_ytdlp_direct() -> Result<String, String> {
+    use std::io::{Read, Write};
+    let dir = tools_dir();
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dest = dir.join("yt-dlp.exe");
+    let url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe".to_string();
+    let dest_clone = dest.clone();
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let resp = ureq::get(&url).timeout(std::time::Duration::from_secs(180)).call().map_err(|e| format!("yt-dlp-Download fehlgeschlagen: {}", e))?;
+        let mut reader = resp.into_reader();
+        let mut file = fs::File::create(&dest_clone).map_err(|e| e.to_string())?;
+        let mut buf = [0u8; 16384];
+        loop { let n = reader.read(&mut buf).map_err(|e| e.to_string())?; if n == 0 { break; } file.write_all(&buf[..n]).map_err(|e| e.to_string())?; }
+        Ok(())
+    }).await.map_err(|e| e.to_string())??;
+    add_tools_to_path();
+    if check_tool("yt-dlp", &["--version"]).0 {
+        Ok("yt-dlp (portable) heruntergeladen + eingerichtet.".to_string())
+    } else {
+        Err("yt-dlp konnte nicht geladen werden. Bitte manuell installieren.".to_string())
+    }
+}
+
 #[tauri::command]
 pub async fn install_ytdlp() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
+        // winget nicht verfügbar -> portables yt-dlp direkt herunterladen (kostenlos)
+        if !winget_available() {
+            return install_ytdlp_direct().await;
+        }
         // Erst Upgrade versuchen (falls schon installiert), dann Install als Fallback.
         // Reines `install` meldet sonst "already installed" statt zu upgraden.
         for action in ["upgrade", "install"] {
@@ -1285,7 +1366,7 @@ pub async fn install_ytdlp() -> Result<String, String> {
 #[tauri::command]
 pub async fn update_ytdlp() -> Result<String, String> {
     // 1. Try running `yt-dlp --update`
-    let mut cmd = Command::new("yt-dlp");
+    let mut cmd = Command::new(resolve_tool("yt-dlp"));
     cmd.arg("--update");
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000);

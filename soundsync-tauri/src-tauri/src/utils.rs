@@ -112,7 +112,7 @@ pub fn get_config_path() -> PathBuf {
 }
 
 pub fn check_tool(name: &str, args: &[&str]) -> (bool, String) {
-    let mut cmd = Command::new(name);
+    let mut cmd = Command::new(resolve_tool(name));
     cmd.args(args);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000);
@@ -335,3 +335,40 @@ mod tests {
         );
     }
 }
+
+// ─── Tool-Auflösung + winget-Erkennung (robuster ohne winget) ────────────────
+
+/// Ordner für automatisch heruntergeladene Tools (ffmpeg/yt-dlp).
+pub fn tools_dir() -> PathBuf {
+    app_config_dir().unwrap_or_else(|| PathBuf::from(".")).join("bin")
+}
+
+fn path_sep() -> &'static str { if cfg!(windows) { ";" } else { ":" } }
+
+/// `tools_dir` an den Anfang von PATH setzen (für Kind-Prozesse + check_tool).
+pub fn add_tools_to_path() {
+    let dir = tools_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let dir_str = dir.to_string_lossy().to_string();
+    let current = std::env::var("PATH").unwrap_or_default();
+    if !current.split(path_sep()).any(|p| PathBuf::from(p) == dir) {
+        std::env::set_var("PATH", format!("{}{}{}", dir_str, path_sep(), current));
+    }
+}
+
+/// Tool auflösen: erst `tools_dir`, sonst über PATH.
+pub fn resolve_tool(name: &str) -> PathBuf {
+    add_tools_to_path();
+    let dir = tools_dir();
+    let exe = if cfg!(windows) { format!("{}.exe", name) } else { name.to_string() };
+    let local = dir.join(&exe);
+    if local.exists() { local } else { PathBuf::from(name) }
+}
+
+#[cfg(target_os = "windows")]
+pub fn winget_available() -> bool {
+    Command::new("winget").arg("--version").output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn winget_available() -> bool { false }
