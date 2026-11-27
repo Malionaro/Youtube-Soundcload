@@ -62,21 +62,19 @@ fi
 if [ -z "$SRC_DIR" ]; then
   if [ -f Cargo.toml ] && [ -d src ]; then
     SRC_DIR="$PWD"
-  elif [ -f src-tauri/Cargo.toml ]; then
-    SRC_DIR="$PWD/src-tauri"
+  elif [ -f relay/soundsync-relay-server/Cargo.toml ]; then SRC_DIR="$PWD/relay/soundsync-relay-server"; elif [ -f src-tauri/Cargo.toml ]; then SRC_DIR="$PWD/relay/soundsync-relay-server"
   else
     say "SoundSync klonen…"
     REPO="${REPO:-https://github.com/Malionaro/Youtube-Soundcload}"
     tmp="$(mktemp -d)"
     git clone --depth 1 "$REPO" "$tmp/repo"
-    SRC_DIR="$tmp/repo/soundsync-tauri/src-tauri"
+    SRC_DIR="$tmp/repo/soundsync-tauri/relay/soundsync-relay-server"
   fi
 fi
 
 say "Bauen: soundsync-relay…"
-( cd "$SRC_DIR" && cargo build --release --bin soundsync-relay )
+( cd "$SRC_DIR" && cargo build --release )
 BIN="$SRC_DIR/target/release/soundsync-relay"
-# auch CARGO_TARGET_DIR beachten
 [ -f "$BIN" ] || BIN="${CARGO_TARGET_DIR:-$SRC_DIR/target}/release/soundsync-relay"
 
 $SUDO install -m 0755 "$BIN" "$INSTALL_PREFIX/soundsync-relay"

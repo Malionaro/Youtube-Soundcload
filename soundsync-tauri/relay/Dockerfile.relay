@@ -1,12 +1,13 @@
 # soundsync-relay (Pi/Server, arm64/amd64) – kostenloser selbstgehosteter Koordinator
+# Eigenständiges Crate, KEIN Tauri. Build-Kontext = Repo-Root.
 FROM rust:1-bookworm AS build
-WORKDIR /src
-COPY . .
-RUN cargo build --release --bin soundsync-relay
+WORKDIR /src/relay/soundsync-relay-server
+COPY soundsync-tauri/relay/soundsync-relay-server ./
+RUN cargo build --release
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=build /src/target/release/soundsync-relay /usr/local/bin/soundsync-relay
+COPY --from=build /src/relay/soundsync-relay-server/target/release/soundsync-relay /usr/local/bin/soundsync-relay
 RUN mkdir -p /data
 ENV PORT=3030
 ENV SOUNDSYNC_RELAY_DIR=/data
