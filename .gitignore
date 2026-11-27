@@ -172,3 +172,6 @@ soundsync-tauri/dist/
 soundsync-tauri/dist-ssr/
 soundsync-tauri/src-tauri/target/
 soundsync-tauri/src-tauri/gen/
+
+!soundsync-tauri/src-tauri/src/bin/
+!soundsync-tauri/src-tauri/src/bin/soundsync-relay.rs

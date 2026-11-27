@@ -1,0 +1,12 @@
+# frp client on the HOST PC (runs SoundSync)
+serverAddr = "192.168.1.50"   # Pi IP
+serverPort = 7000
+# auth.method = "token"
+# auth.token = "change-me"
+
+[[proxies]]
+name = "soundsync-team"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 3030              # SoundSync server
+remotePort = 13337            # public port on the Pi

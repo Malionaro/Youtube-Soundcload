@@ -1,0 +1,5 @@
+# frp server on the Raspberry Pi
+bindPort = 7000
+# optional auth token shared with frpc:
+# auth.method = "token"
+# auth.token = "change-me"

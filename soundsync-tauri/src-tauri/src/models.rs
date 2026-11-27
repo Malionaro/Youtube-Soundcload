@@ -1,34 +1,70 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
+
+/// Lock a mutex without panicking if a previous holder panicked (poison recovery).
+pub fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 // ─── App State ───────────────────────────────────────────────────────────────
 
-#[derive(Default)]
 pub struct AppState {
     pub is_downloading: Mutex<bool>,
     pub abort_flag: Mutex<bool>,
     pub pause_flag: Mutex<bool>,
     pub active_download_pids: Arc<Mutex<Vec<u32>>>,
     pub config: Mutex<AppConfig>,
-    pub discord_client: Mutex<Option<DiscordClient>>,
+    pub discord_client: Arc<Mutex<Option<DiscordClient>>>,
     pub current_progress: Mutex<Option<DownloadProgress>>,
     pub remote_queue: Mutex<Vec<RemoteQueueItem>>,
     pub remote_token: Mutex<String>,
+    pub team: Mutex<crate::team::TeamState>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            is_downloading: Mutex::new(false),
+            abort_flag: Mutex::new(false),
+            pause_flag: Mutex::new(false),
+            active_download_pids: Arc::new(Mutex::new(Vec::new())),
+            config: Mutex::new(AppConfig::default()),
+            discord_client: Arc::new(Mutex::new(None)),
+            current_progress: Mutex::new(None),
+            remote_queue: Mutex::new(Vec::new()),
+            remote_token: Mutex::new(generate_remote_token()), team: Mutex::new(crate::team::TeamState::default()),
+        }
+    }
 }
 
 pub fn generate_remote_token() -> String {
-    // Kein extra Dep: Zeit + PID + Counter → hex. Gut genug für LAN-CSRF-Schutz.
+    // OS-Entropie via std::collections::hash_map::RandomState (ohne extra Crate) + Zeit/PID/Counter
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
     use std::sync::atomic::{AtomicU64, Ordering};
+
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let pid = std::process::id() as u128;
-    let c = COUNTER.fetch_add(1, Ordering::Relaxed) as u128;
-    let mixed = now ^ ((pid << 32) | (c & 0xffff_ffff));
-    format!("{:032x}", mixed.wrapping_mul(0x9e3779b97f4a7c15))
+    let pid = std::process::id() as u64;
+    let c = COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    let mut h1 = RandomState::new().build_hasher();
+    h1.write_u128(now);
+    h1.write_u64(pid);
+    h1.write_u64(c);
+    let part1 = h1.finish();
+
+    let mut h2 = RandomState::new().build_hasher();
+    h2.write_u64(part1);
+    h2.write_u64(c.wrapping_add(1));
+    h2.write_u128(now.rotate_left(37));
+    let part2 = h2.finish();
+
+    format!("{:016x}{:016x}", part1, part2)
 }
 
 pub struct DiscordClient {
@@ -38,14 +74,17 @@ pub struct DiscordClient {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default = "default_download_folder")]
     pub download_folder: String,
+    #[serde(default)]
     pub cookies_path: String,
+    #[serde(default = "default_language")]
     pub language: String,
     #[serde(default)]
     pub disable_changelog: bool,
     #[serde(default = "default_auto_url_detection")]
     pub auto_url_detection: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub discord_rpc: bool,
     pub accent_color: Option<String>,
     pub custom_background: Option<String>,
@@ -69,6 +108,17 @@ pub struct AppConfig {
     pub format: String,
     #[serde(default = "default_true")]
     pub auto_scroll_tracks: bool,
+}
+
+pub fn default_download_folder() -> String {
+    dirs_next()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .to_string_lossy()
+        .to_string()
+}
+
+pub fn default_language() -> String {
+    "en".to_string()
 }
 
 pub fn default_after_download() -> String {
@@ -219,4 +269,30 @@ pub struct SystemCheckResult {
     pub ytdlp_version: String,
     pub pot_provider_installed: bool,
     pub pot_provider_status: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remote_token_is_32_hex_chars_and_unique() {
+        let t1 = generate_remote_token();
+        let t2 = generate_remote_token();
+        assert_eq!(t1.len(), 32);
+        assert!(t1.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(t1, t2);
+    }
+
+    #[test]
+    fn app_config_deserializes_with_defaults() {
+        let cfg: AppConfig = serde_json::from_str("{}").expect("empty JSON should deserialize");
+        assert_eq!(cfg.format, "mp3");
+        assert_eq!(cfg.quality, "best");
+        assert_eq!(cfg.gpu_encoder, "auto");
+        assert_eq!(cfg.sponsorblock_mode, "off");
+        assert!(cfg.auto_tagging);
+        assert!(cfg.auto_scroll_log);
+        assert!(cfg.auto_scroll_tracks);
+    }
 }

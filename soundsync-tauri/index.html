@@ -2,6 +2,7 @@
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/src/assets/logo.png" />
     <link rel="stylesheet" href="/src/styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,10 +18,10 @@
     <header id="app-header">
       <div class="header-left">
         <div class="logo-icon" id="logo-icon">
-          <img src="/src/assets/logo.png" alt="Logo" width="28" height="28" style="border-radius: 6px;" />
+          <img src="/src/assets/logo.png" alt="SoundSync Logo" width="40" height="40" />
         </div>
         <h1 id="app-title">SoundSync Downloader</h1>
-        <span class="version-badge" id="app-version-badge">v2.5.1</span>
+        <span class="version-badge" id="app-version-badge">v2.6.0</span>
       </div>
       <div class="header-right">
         <select id="language-select" class="language-select">
@@ -50,7 +51,7 @@
           <span class="info-badge" aria-hidden="true">i</span>
           <div id="tv-mode-tooltip" class="custom-tooltip" role="tooltip" data-i18n="tv_mode_desc">Vergrößert das UI für Fernseher und aktiviert die Pfeiltasten-Navigation.</div>
         </button>
-        <button id="settings-btn" class="icon-btn" title="Settings">
+        <button id="settings-btn" class="icon-btn" title="Settings" data-i18n-title="settings">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
@@ -119,7 +120,7 @@
             <div class="input-row">
               <input type="text" id="folder-input" class="text-input" placeholder="" data-i18n-placeholder="folder_placeholder" readonly />
               <button id="browse-btn" class="btn btn-secondary" data-i18n="browse">Durchsuchen</button>
-              <button id="open-folder-btn" class="icon-btn" title="Open Folder">
+              <button id="open-folder-btn" class="icon-btn" title="Open Folder" data-i18n-title="open_folder">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               </button>
             </div>
@@ -277,7 +278,7 @@
         <div id="trending-tab" class="tab-content">
           <div class="trending-header card">
              <div class="trending-info">
-                <h2 data-i18n="trending_title" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--warning);flex-shrink:0"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> Aktuelle Musik-Charts</h2>
+                <h2 style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--warning);flex-shrink:0"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg><span data-i18n="trending_title">Aktuelle Musik-Charts</span></h2>
                 <p data-i18n="trending_desc">Die beliebtesten Tracks von YouTube Music</p>
              </div>
              <button id="refresh-trending-btn" class="icon-btn" title="" data-i18n-title="refresh">
@@ -299,7 +300,7 @@
         <div id="queue-tab" class="tab-content">
           <div class="queue-header card">
              <div class="queue-info">
-                <h2 id="queue-title-header" data-i18n="queue_title" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg> Sammelkorb / Warteschlange</h2>
+                <h2 id="queue-title-header" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg><span data-i18n="queue_title">Sammelkorb / Warteschlange</span></h2>
                 <p id="queue-desc" data-i18n="queue_desc">Hier werden im Hintergrund kopierte oder von der Extension gesendete Links gesammelt.</p>
              </div>
              <div class="queue-actions-row">
@@ -361,7 +362,7 @@
          <div id="history-tab" class="tab-content">
            <div class="queue-header card">
               <div class="queue-info">
-                 <h2 id="history-title-header" data-i18n="history_title" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> Download-Verlauf</h2>
+                 <h2 id="history-title-header" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg><span data-i18n="history_title">Download-Verlauf</span></h2>
                  <p id="history-desc" data-i18n="history_desc">Bisher heruntergeladene Titel auf diesem Gerät.</p>
               </div>
               <div class="queue-actions-row">
@@ -414,7 +415,7 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
           GitHub
         </a>
-        <span id="footer-version">Version: 2.5.1</span>
+        <span id="footer-version">Version: 2.6.0</span>
       </div>
     </footer>
 
@@ -478,7 +479,7 @@
     <div class="modal-overlay" id="convert-modal" style="display:none">
       <div class="modal">
         <div class="modal-header">
-          <h2 id="modal-convert-title" data-i18n="conversion_label" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);flex-shrink:0"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg> Dateikonvertierung</h2>
+          <h2 id="modal-convert-title" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);flex-shrink:0"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg><span data-i18n="conversion_label">Dateikonvertierung</span></h2>
           <button class="modal-close" id="convert-modal-close">✕</button>
         </div>
         <div class="modal-body">
@@ -486,7 +487,7 @@
             <label class="input-label" id="modal-file-label" data-i18n="select_file">Dateien auswählen:</label>
             <div class="input-row">
               <input type="text" id="convert-file-input" class="text-input" placeholder="" data-i18n-placeholder="select_file_placeholder" readonly />
-              <button id="convert-browse-btn" class="btn btn-secondary">Durchsuchen</button>
+              <button id="convert-browse-btn" class="btn btn-secondary" data-i18n="browse">Durchsuchen</button>
             </div>
           </div>
           <div class="form-row">
@@ -513,10 +514,10 @@
             <div class="form-group">
               <label class="input-label" id="modal-quality-label" data-i18n="quality">Qualität:</label>
               <select id="convert-quality-select" class="select-input">
-                <option value="low">Niedrig</option>
-                <option value="medium">Mittel</option>
-                <option value="high" selected>Hoch</option>
-                <option value="max">Maximal</option>
+                <option value="low" data-i18n="quality_low">Niedrig</option>
+                <option value="medium" data-i18n="quality_medium">Mittel</option>
+                <option value="high" selected data-i18n="quality_high">Hoch</option>
+                <option value="max" data-i18n="quality_max">Maximal</option>
               </select>
             </div>
           </div>
@@ -538,7 +539,7 @@
     <div class="modal-overlay" id="system-modal" style="display:none">
       <div class="modal small">
         <div class="modal-header">
-          <h2 id="system-modal-title" data-i18n="system_check" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Systemprüfung</h2>
+          <h2 id="system-modal-title" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span data-i18n="system_check">Systemprüfung</span></h2>
           <button class="modal-close" id="system-modal-close">✕</button>
         </div>
         <div class="modal-body">
@@ -582,7 +583,7 @@
     <div class="modal-overlay" id="settings-modal" style="display:none">
       <div class="modal">
         <div class="modal-header">
-          <h2 id="settings-modal-title" data-i18n="settings" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);flex-shrink:0"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Einstellungen</h2>
+          <h2 id="settings-modal-title" style="display:flex;align-items:center;gap:8px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);flex-shrink:0"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span data-i18n="settings">Einstellungen</span></h2>
           <button class="modal-close" id="settings-modal-close">✕</button>
         </div>
         <div class="modal-body">
@@ -663,7 +664,7 @@
 
             <div class="setting-item">
               <div class="setting-info">
-                <strong id="setting-eco-title" data-i18n="eco_mode" style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--success)"><path d="M12 22V12M12 12C12 12 7 9 3 10c0 0 2 8 9 9M12 12c0 0 5-3 9-2 0 0-2 8-9 9"/></svg> Eco-Mode (Standby)</strong>
+                <strong id="setting-eco-title" style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--success);flex-shrink:0"><path d="M12 22V12M12 12C12 12 7 9 3 10c0 0 2 8 9 9M12 12c0 0 5-3 9-2 0 0-2 8-9 9"/></svg><span data-i18n="eco_mode">Eco-Mode (Standby)</span></strong>
                 <span id="setting-eco-desc" data-i18n="eco_mode_desc">Reduziert CPU-Nutzung im Hintergrund. Pausiert Animationen und Clipboard-Überwachung.</span>
               </div>
               <label class="toggle-switch">
@@ -674,7 +675,7 @@
 
             <div class="setting-item separator">
               <div class="setting-info">
-                <strong id="setting-tagging-title" data-i18n="ai_tagging" style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> KI-Tagging & Cover</strong>
+                <strong id="setting-tagging-title" style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);flex-shrink:0"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span data-i18n="ai_tagging">KI-Tagging & Cover</span></strong>
                 <span id="setting-tagging-desc" data-i18n="ai_tagging_desc">Bettet automatisch Metadaten und Cover-Bilder in die Dateien ein.</span>
               </div>
               <label class="toggle-switch">
@@ -708,24 +709,32 @@
                 <strong data-i18n="gpu_encoder_label">GPU-Encoding</strong>
                 <span data-i18n="gpu_encoder_desc">Wähle den FFmpeg-Hardware-Encoder, wenn deine GPU ihn unterstützt.</span>
               </div>
-              <select id="gpu-encoder-select" class="select-input small" style="width: auto; min-width: 150px;">
+              <select id="gpu-encoder-select" class="select-input small" style="width: auto; min-width: 190px;">
                 <option value="auto" data-i18n="gpu_encoder_auto">Auto / FFmpeg Standard</option>
                 <option value="off" data-i18n="gpu_encoder_off">Aus</option>
+                <option value="nvenc_h264">NVIDIA NVENC (H.264)</option>
+                <option value="nvenc_hevc">NVIDIA NVENC (HEVC)</option>
+                <option value="qsv_h264">Intel Quick Sync (H.264)</option>
+                <option value="qsv_hevc">Intel Quick Sync (HEVC)</option>
+                <option value="amf_h264">AMD AMF (H.264)</option>
+                <option value="amf_hevc">AMD AMF (HEVC)</option>
+                <option value="videotoolbox_h264">Apple VideoToolbox (H.264)</option>
+                <option value="videotoolbox_hevc">Apple VideoToolbox (HEVC)</option>
               </select>
             </div>
 
             <div class="setting-item separator remote-section" style="display:flex; flex-direction:column; align-items:stretch; gap:16px;">
               <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
                 <div class="setting-info">
-                  <strong data-i18n="remote_control" style="display:flex; align-items:center; gap:8px;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-                    Fernsteuerung (Beta)
+                  <strong style="display:flex; align-items:center; gap:8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent);flex-shrink:0"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                    <span data-i18n="remote_control">Fernsteuerung (Beta)</span>
                   </strong>
                   <span data-i18n="remote_desc">Scanne den Code, um Links vom Handy zu senden</span>
                 </div>
-                <div style="display:flex; align-items:center; gap:6px; background:rgba(0,225,186,0.1); border:1px solid rgba(0,225,186,0.2); padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; color:var(--primary);">
-                  <span class="status-dot" style="width:6px; height:6px; background:var(--primary); box-shadow:0 0 6px var(--primary); margin:0;"></span>
-                  ONLINE
+                <div id="remote-status-pill" style="display:flex; align-items:center; gap:6px; background:rgba(0,225,186,0.1); border:1px solid rgba(0,225,186,0.2); padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; color:var(--primary);">
+                  <span id="remote-status-dot" class="status-dot" style="width:6px; height:6px; background:var(--primary); box-shadow:0 0 6px var(--primary); margin:0;"></span>
+                  <span id="remote-status-label" data-i18n="remote_status_online">ONLINE</span>
                 </div>
               </div>
               
@@ -733,15 +742,15 @@
                 <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:8px; font-size:11px; line-height:1.45; color:var(--text-secondary);">
                   <div style="display:flex; gap:8px; align-items:flex-start;">
                     <span style="background:var(--bg-hover); width:18px; height:18px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:700; color:var(--accent); flex-shrink:0;">1</span>
-                    <span>Smartphone mit dem gleichen WLAN-Netzwerk verbinden.</span>
+                    <span data-i18n="remote_step_1">Smartphone mit dem gleichen WLAN-Netzwerk verbinden.</span>
                   </div>
                   <div style="display:flex; gap:8px; align-items:flex-start;">
                     <span style="background:var(--bg-hover); width:18px; height:18px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:700; color:var(--accent); flex-shrink:0;">2</span>
-                    <span>QR-Code scannen, um das Web-Interface am Handy zu öffnen.</span>
+                    <span data-i18n="remote_step_2">QR-Code scannen, um das Web-Interface am Handy zu öffnen.</span>
                   </div>
                   <div style="display:flex; gap:8px; align-items:flex-start;">
                     <span style="background:var(--bg-hover); width:18px; height:18px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:700; color:var(--accent); flex-shrink:0;">3</span>
-                    <span>Musiklinks einfügen — sie landen direkt im Sammelkorb deines PCs!</span>
+                    <span data-i18n="remote_step_3">Musiklinks einfügen — sie landen direkt im Sammelkorb deines PCs!</span>
                   </div>
                 </div>
                 
@@ -754,14 +763,81 @@
             </div>
           </div>
 
+          <!-- ─── Team-Modus / P2P ───────────────────────────────────── -->
+          <div class="setting-item separator team-section" id="team-section" style="display:flex; flex-direction:column; align-items:stretch; gap:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+              <div class="setting-info">
+                <strong data-i18n="team_title" style="display:flex; align-items:center; gap:8px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  Team-Download (P2P)
+                </strong>
+                <span data-i18n="team_desc">Zwei PCs verbinden · Playlist gemeinsam laden · automatischer Übernahme bei Sperre</span>
+              </div>
+              <div id="team-role-badge" style="background:var(--bg-hover); border:1px solid var(--bg-hover); padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; color:var(--text-secondary);">Aus</div>
+            </div>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <input type="text" id="team-name-input" class="text-input small" data-i18n-placeholder="team_name_placeholder" placeholder="Dein Name / PC-Name" style="flex:1; min-width:160px;" autocomplete="off" />
+            </div>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <input type="text" id="team-advertised-input" class="text-input small" data-i18n-placeholder="team_advertised_placeholder" placeholder="Erreichbare Adresse (optional, z.B. Pi-Relay IP:Port)" style="flex:1; min-width:200px;" autocomplete="off" />
+            </div>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button id="team-create-btn" class="btn btn-primary" data-i18n="team_create">Team erstellen</button>
+            </div>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <input type="text" id="team-join-input" class="text-input small" data-i18n-placeholder="team_join_placeholder" placeholder="soundsync-team://…" style="flex:1; min-width:200px;" autocomplete="off" />
+              <button id="team-join-btn" class="btn btn-secondary" data-i18n="team_join">Beitreten</button>
+            </div>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; border-top:1px dashed var(--bg-hover); padding-top:10px;">
+              <span data-i18n="team_relay_label" style="font-size:11px; color:var(--text-secondary); width:100%;">Selbstgehosteter Server (kostenloser Relay, kein Port-Forwarding):</span>
+              <input type="text" id="team-relay-url" class="text-input small" style="flex:1; min-width:180px;" value="https://65.21.135.40" autocomplete="off" />
+              <input type="text" id="team-relay-token" class="text-input small" data-i18n-placeholder="team_relay_token_placeholder" placeholder="Relay-Token" style="flex:1; min-width:140px;" autocomplete="off" />
+              <button id="team-connect-relay-btn" class="btn btn-primary" data-i18n="team_connect_relay">Mit Server verbinden</button>
+            </div>
+
+            <div id="team-link-box" style="display:none; flex-direction:column; gap:6px;">
+              <span data-i18n="team_invite_label" style="font-size:11px; color:var(--text-secondary);">Einladungs-Link (an den zweiten PC schicken):</span>
+              <div style="display:flex; gap:8px;">
+                <input type="text" id="team-link-output" class="text-input small" readonly style="flex:1;" />
+                <button id="team-copy-link-btn" class="btn btn-secondary" data-i18n="team_copy">Kopieren</button>
+              </div>
+            </div>
+
+            <div id="team-active-box" style="display:none; flex-direction:column; gap:12px;">
+              <div id="team-members" style="font-size:12px; color:var(--text-secondary);"></div>
+
+              <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <input type="text" id="team-add-playlist-input" class="text-input small" data-i18n-placeholder="team_add_playlist_placeholder" placeholder="Eigene Playlist-URL hinzufügen…" style="flex:1; min-width:200px;" autocomplete="off" />
+                <button id="team-add-playlist-btn" class="btn btn-secondary" data-i18n="team_add_playlist">Playlist beisteuern</button>
+              </div>
+
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button id="team-start-btn" class="btn btn-primary" data-i18n="team_start">Team-Download starten</button>
+                <button id="team-stop-btn" class="btn btn-secondary" data-i18n="team_stop" style="display:none;">Anhalten</button>
+                <button id="team-pull-btn" class="btn btn-secondary" data-i18n="team_pull_missing">Fehlende Dateien holen</button>
+                <button id="team-leave-btn" class="btn btn-secondary" data-i18n="team_leave">Team verlassen</button>
+              </div>
+
+              <div id="team-progress" style="font-size:12px; color:var(--text-secondary);"></div>
+              <div id="team-tasks" style="max-height:220px; overflow:auto; display:flex; flex-direction:column; gap:4px; font-size:11px;"></div>
+            </div>
+
+            <div id="team-error" style="font-size:11px; color:var(--error);"></div>
+          </div>
+
           <div class="version-info-section">
             <div class="version-header">
-               <span id="current-version-text"><span data-i18n="current_version">Aktuelle Version: </span><span id="update-current-version">2.5.1</span></span>
+               <span id="current-version-text"><span data-i18n="current_version">Aktuelle Version: </span><span id="update-current-version">2.6.0</span></span>
                <span id="update-status-tag" class="status-tag" data-i18n="up_to_date">Aktuell</span>
             </div>
             <button id="check-update-btn" class="btn btn-secondary btn-full">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-              Auf Updates prüfen
+              <span id="check-update-btn-text" data-i18n="check_updates">Auf Updates prüfen</span>
             </button>
           </div>
           

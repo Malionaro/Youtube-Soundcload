@@ -1,0 +1,25 @@
+[Unit]
+Description=SoundSync Team-Mode Relay / Coordinator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/soundsync-relay
+Restart=always
+RestartSec=3
+
+# Konfiguration
+Environment=PORT=3030
+# Wichtig setzen! sonst wird ein zufälliges Token erzeugt + ins Log geschrieben:
+# Environment=SOUNDSYNC_RELAY_TOKEN=dein-langes-secret
+Environment=SOUNDSYNC_TEAM_ID=team
+Environment=SOUNDSYNC_RELAY_DIR=/var/lib/soundsync-relay
+# Adresse, die im Einladungs-Link angezeigt wird (erreichbarer Server/Pi):
+# Environment=SOUNDSYNC_ADVERTISED_ADDR=pi.example.com:3030
+
+# Sammelordner
+StateDirectory=soundsync-relay
+
+[Install]
+WantedBy=multi-user.target

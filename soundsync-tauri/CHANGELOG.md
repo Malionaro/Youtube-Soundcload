@@ -1,3 +1,15 @@
+----------------------------**V2.6.0**----------------------------
+
+**Self-hosted relay / server-hosted API (`soundsync-relay`):** standalone free coordinator binary (no Tauri/yt-dlp) to run on a Raspberry Pi / always-on server. Both PCs connect only outward (`team_join`); no port forwarding on the PCs. `advertised_addr` for `team_create`. systemd + Docker + docs in `relay/`.
+
+**New Features:**
+- **Team-Mode / P2P two-PC download:** Connect a second PC for free (no central server, token-protected local protocol on port 3030). Create a team and share a generated soundsync-team://<addr> invite link, or join one. Each PC can add its own playlist; both are merged into one de-duplicated combined list and downloaded together (work-stealing split across both PCs).
+- **Automatic failover / takeover:** If one PC is temporarily **blocked by YouTube** (HTTP 429 / rate-limit / bot-check / 403) or **goes offline**, its unfinished tracks are automatically re-queued and **taken over by the other PC**. A blocked PC pauses briefly, then re-joins after a cooldown. Unrecoverable tracks are retried up to a cap, then marked failed.
+- **Shared output:** Finished files can be uploaded to the coordinator and synced; **Get missing files** pulls anything you don't have yet.
+- New settings section **Team-Download (P2P)** (DE/EN/PL), live member list, per-track status, progress. New Tauri commands: `team_create`, `team_join`, `team_leave`, `team_add_playlist`, `team_start`, `team_stop`, `team_status`, `team_pull_missing`. New HTTP endpoints under `/team/*`. New Rust module `team.rs` with unit tests.
+
+---
+
 ----------------------------**V2.5.1**----------------------------
 
 **Bug Fixes:**

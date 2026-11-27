@@ -1,0 +1,6 @@
+# Shell-Skripte / Pi-Service müssen LF haben (sonst bricht sh/systemd auf Linux/Pi)
+*.sh text eol=lf
+soundsync-tauri/relay/*.service text eol=lf
+soundsync-tauri/relay/Dockerfile.relay text eol=lf
+soundsync-tauri/relay/frp/*.toml text eol=lf
+soundsync-tauri/relay/docker-compose*.yml text eol=lf

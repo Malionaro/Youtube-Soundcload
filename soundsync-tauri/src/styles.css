@@ -96,6 +96,7 @@ body::before {
   filter: blur(80px);
   z-index: -1;
   transform-origin: center;
+  will-change: transform;
   animation: bgMove 30s ease-in-out infinite alternate;
 }
 
@@ -146,14 +147,23 @@ body {
 
 .logo-icon {
   width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--accent), var(--primary));
-  border-radius: var(--radius-sm); color: white;
+  background: transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
   animation: logoPulse 3s ease-in-out infinite;
 }
 
+.logo-icon img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
 @keyframes logoPulse {
-  0%, 100% { transform: scale(1) translateY(0) rotate(0deg); filter: drop-shadow(0 0 5px var(--accent-glow)); }
-  50% { transform: scale(1.08) translateY(-4px) rotate(4deg); filter: drop-shadow(0 0 15px var(--primary-glow)); }
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px var(--accent-glow)); }
+  50% { transform: scale(1.05); filter: drop-shadow(0 0 14px var(--primary-glow)); }
 }
 
 #app-title { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
@@ -985,8 +995,6 @@ input:checked + .toggle-track::after {
   height: 88px;
   min-height: 88px;
   flex-shrink: 0;
-  transform: translateZ(0);
-  will-change: box-shadow, background-color, border-color;
 }
 
 .track-card::before {
@@ -1245,6 +1253,11 @@ input:checked + .toggle-track::after {
   color: black;
 }
 
+.status-tag.error {
+  background: var(--danger);
+  color: white;
+}
+
 .check-item {
   display: flex;
   align-items: flex-start;
@@ -1341,18 +1354,7 @@ input:checked + .toggle-track::after {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
-/* ═══ Modals ═══ */
-.modal {
-  background: var(--bg-card);
-  border-radius: 20px; /* Schön abgerundet */
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-lg);
-  width: 90%;
-  max-width: 520px;
-  backdrop-filter: blur(20px);
-  overflow: hidden;
-}
-
+/* Modal header/body layout (inherits .modal / .modal.small above) */
 .modal-header {
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px 20px; border-bottom: 1px solid var(--border);
@@ -2222,6 +2224,17 @@ body.tv-mode *:focus {
   flex-direction: column;
   gap: 10px;
   padding-bottom: 20px;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .queue-card {

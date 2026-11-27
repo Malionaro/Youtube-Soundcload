@@ -5,6 +5,11 @@ import { open, confirm } from "@tauri-apps/plugin-dialog";
 import { isPermissionGranted, onAction, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { openUrl, openPath } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import logoImg from "./assets/logo.png";
+
+const DEFAULT_ACCENT_COLOR = "#8e7cf3";
+const THEME_STORAGE_KEY = "soundsync_theme_v1";
+const BATCH_PLACEHOLDER = "Sammelkorb Batch-Download";
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 function debounce<T extends (...args: any[]) => any>(fn: T, ms: number): (...args: Parameters<T>) => void {
@@ -150,11 +155,13 @@ let downloadRunId = 0;
 let startTime = 0;
 let playlistEntries: PlaylistEntry[] = [];
 let clipboardWatchTimer: number | null = null;
+let clipboardCheckInFlight = false;
 let lastDetectedUrl = "";
 let pendingDetectedUrl = "";
 let pendingDetectedUrls: string[] = [];
 let appVersion = "0.0.0";
 let selectedConversionFiles: string[] = [];
+let isConvertingBatch = false;
 let logScrollPending = false;
 let trackScrollPending = false;
 let isWindowVisible = true;
@@ -163,6 +170,7 @@ let isTvMode = false;
 let currentTranslations: Record<string, string> = {};
 let notificationActionListenerReady = false;
 let trackProgressByIndex = new Map<number, number>();
+let convertingTracks = new Set<number>();
 let isDownloadPaused = false;
 let lastFailedAction: (() => void | Promise<void>) | null = null;
 
@@ -380,8 +388,24 @@ function closeOnboarding() {
   if (modal) modal.style.display = "none";
 }
 
-function updateTrayStatus(status: string) {
+let lastTrayUpdate = 0;
+function updateTrayStatus(status: string, force = false) {
+  const now = Date.now();
+  if (!force && now - lastTrayUpdate < 1500) return;
+  lastTrayUpdate = now;
   void invoke("update_tray_status", { status }).catch(() => {});
+}
+
+function setOptGroupActive(group: HTMLElement, active: boolean) {
+  group.style.display = active ? "" : "none";
+  group.hidden = !active;
+  if (group instanceof HTMLOptGroupElement) {
+    group.disabled = !active;
+  }
+  group.querySelectorAll("option").forEach((option) => {
+    option.disabled = !active;
+    option.hidden = !active;
+  });
 }
 
 function updateQualityOptions() {
@@ -389,19 +413,29 @@ function updateQualityOptions() {
   const opt = formatSelect.options[formatSelect.selectedIndex] as HTMLOptionElement;
   const group = opt.parentElement as HTMLOptGroupElement | null;
   const isVideo = group?.tagName === "OPTGROUP" && group.label === "Video";
+  const currentVal = qualitySelect.value;
+
   if (isVideo) {
-    audioQualities.style.display = "none";
-    videoQualities.style.display = "block";
-    const currentVal = qualitySelect.value;
-    if (currentVal === "good") {
-      qualitySelect.value = "1080p"; // sensible fallback
+    setOptGroupActive(audioQualities, false);
+    setOptGroupActive(videoQualities, true);
+    const matchingOpt = Array.from(videoQualities.querySelectorAll("option")).find((o) => o.value === currentVal);
+    if (matchingOpt) {
+      matchingOpt.selected = true;
+    } else {
+      const fallback = Array.from(videoQualities.querySelectorAll("option")).find((o) => o.value === "1080p")
+        || videoQualities.querySelector("option");
+      if (fallback) fallback.selected = true;
     }
   } else {
-    audioQualities.style.display = "block";
-    videoQualities.style.display = "none";
-    const currentVal = qualitySelect.value;
-    if (["4k", "1080p", "720p", "480p"].includes(currentVal)) {
-      qualitySelect.value = "best"; // sensible fallback
+    setOptGroupActive(videoQualities, false);
+    setOptGroupActive(audioQualities, true);
+    const matchingOpt = Array.from(audioQualities.querySelectorAll("option")).find((o) => o.value === currentVal);
+    if (matchingOpt) {
+      matchingOpt.selected = true;
+    } else {
+      const fallback = Array.from(audioQualities.querySelectorAll("option")).find((o) => o.value === "best")
+        || audioQualities.querySelector("option");
+      if (fallback) fallback.selected = true;
     }
   }
 }
@@ -429,10 +463,22 @@ async function init() {
     if (config.discord_rpc === undefined) config.discord_rpc = true;
     if (config.format) formatSelect.value = config.format;
     
-  updateQualityOptions();
-  if (config.quality) qualitySelect.value = config.quality;
-  loadQueue();
-  loadHistory();
+    updateQualityOptions();
+    if (config.quality) {
+      const activeGroup = formatSelect.options[formatSelect.selectedIndex]?.parentElement?.getAttribute("label") === "Video"
+        ? videoQualities
+        : audioQualities;
+      const optMatch = Array.from(activeGroup.querySelectorAll("option")).find((o) => o.value === config.quality);
+      if (optMatch) optMatch.selected = true;
+    }
+    loadQueue();
+    loadHistory();
+
+    // Restore persisted light/dark mode
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme === "light" || savedTheme === "dark") {
+      applyColorScheme(savedTheme);
+    }
 
     // Apply defaults for new settings
     if (config.auto_scroll_log === undefined) config.auto_scroll_log = true;
@@ -565,15 +611,18 @@ function renderResults(entries: PlaylistEntry[], container: HTMLElement, resultT
   entries.forEach((entry, idx) => {
     const card = document.createElement("div");
     card.className = "result-card";
-    card.style.animationDelay = `${idx * 0.05}s`;
+    card.style.animationDelay = `${Math.min(idx, 12) * 0.03}s`;
 
     const durationStr = entry.duration ? formatDuration(entry.duration) : "";
     const isPlaylist = resultType === "playlists";
+    const safeThumb = entry.thumbnail && /^https?:\/\//i.test(entry.thumbnail)
+      ? escapeAttribute(entry.thumbnail)
+      : escapeAttribute(logoImg);
     
     card.innerHTML = `
       <div class="result-thumb-container">
-        <img src="${entry.thumbnail || '/src/assets/logo.png'}" class="result-thumb" loading="lazy" />
-        ${durationStr ? `<span class="result-duration">${durationStr}</span>` : ""}
+        <img src="${safeThumb}" class="result-thumb" loading="lazy" />
+        ${durationStr ? `<span class="result-duration">${escapeHtml(durationStr)}</span>` : ""}
         ${isPlaylist ? `<span class="result-duration">Playlist</span>` : ""}
       </div>
       <div class="result-info">
@@ -583,10 +632,17 @@ function renderResults(entries: PlaylistEntry[], container: HTMLElement, resultT
       <div class="result-actions">
         <button class="btn btn-small btn-primary btn-full download-result-btn" data-url="${escapeAttribute(entry.url)}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          ${isPlaylist ? "In Korb" : "Download"}
+          ${escapeHtml(isPlaylist ? _("result_add_to_queue") : _("result_download"))}
         </button>
       </div>
     `;
+
+    const imgEl = card.querySelector<HTMLImageElement>(".result-thumb");
+    if (imgEl) {
+      imgEl.onerror = () => {
+        if (imgEl.src !== logoImg) imgEl.src = logoImg;
+      };
+    }
 
     card.querySelector(".download-result-btn")?.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -638,29 +694,51 @@ async function updateDiscordPresence(details: string, state_msg: string, force =
   }
 }
 
+function selectPlatformInstallerAsset(assets: any[]): any | undefined {
+  const ua = (navigator.userAgent || "").toLowerCase();
+  if (ua.includes("mac")) {
+    return assets.find((a: any) => typeof a?.name === "string" && a.name.toLowerCase().endsWith(".dmg"));
+  }
+  if (ua.includes("linux")) {
+    return (
+      assets.find((a: any) => typeof a?.name === "string" && a.name.toLowerCase().endsWith(".appimage")) ||
+      assets.find((a: any) => typeof a?.name === "string" && a.name.toLowerCase().endsWith(".deb")) ||
+      assets.find((a: any) => typeof a?.name === "string" && a.name.toLowerCase().endsWith(".rpm"))
+    );
+  }
+  return assets.find(
+    (a: any) => typeof a?.name === "string" && (a.name.toLowerCase().endsWith(".msi") || a.name.toLowerCase().endsWith(".exe")),
+  );
+}
+
 async function checkForUpdates(manual: boolean = false) {
   const tag = $("update-status-tag");
   const btn = $("check-update-btn") as HTMLButtonElement;
+  const btnText = maybeElement("check-update-btn-text");
   
   const currentVersion = await getVersion();
   
   if (manual) {
-    tag.textContent = "Prüfe...";
+    tag.textContent = _("update_checking");
     tag.className = "status-tag checking";
     btn.disabled = true;
   }
 
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+
   try {
-    const response = await fetch("https://api.github.com/repos/Malionaro/Youtube-Soundcload/releases/latest");
+    const response = await fetch("https://api.github.com/repos/Malionaro/Youtube-Soundcload/releases/latest", {
+      signal: controller.signal,
+    });
     if (!response.ok) throw new Error("GitHub API unreachable");
     
     const data = await response.json();
-    const latestVersion = data.tag_name.replace(/^v/i, "");
+    const latestVersion = String(data.tag_name || "").replace(/^v/i, "");
 
-    // Simple semver check
     const isNewer = (v1: string, v2: string) => {
-      const parts1 = v1.split('.').map(p => parseInt(p, 10));
-      const parts2 = v2.split('.').map(p => parseInt(p, 10));
+      const parts1 = v1.split(".").map((p) => parseInt(p, 10));
+      const parts2 = v2.split(".").map((p) => parseInt(p, 10));
       for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
         const a = isNaN(parts1[i]) ? 0 : parts1[i];
         const b = isNaN(parts2[i]) ? 0 : parts2[i];
@@ -670,50 +748,43 @@ async function checkForUpdates(manual: boolean = false) {
       return false;
     };
     
-    if (isNewer(latestVersion, currentVersion)) {
-      tag.textContent = "Update verfügbar!";
+    if (latestVersion && isNewer(latestVersion, currentVersion)) {
+      tag.textContent = _("update_available");
       tag.className = "status-tag update-available";
       
-      // Always prompt if there's an update, regardless of `manual`
-      // Find the installer asset (.msi or .exe)
-      const assets = data.assets || [];
-      const installerAsset = assets.find((a: any) => 
-        a.name.endsWith(".msi") || a.name.endsWith(".exe")
-      );
+      const assets = Array.isArray(data.assets) ? data.assets : [];
+      const installerAsset = selectPlatformInstallerAsset(assets);
 
       if (installerAsset) {
         const confirmed = await confirm(
-          `Version ${latestVersion} ist verfügbar!\n\nMöchtest du das Update jetzt herunterladen und installieren?\n\nDatei: ${installerAsset.name}`,
-          { title: "Update verfügbar", kind: "info" }
+          _("update_confirm_download", { version: latestVersion, file: installerAsset.name }),
+          { title: _("update_confirm_title"), kind: "info" }
         );
         
         if (confirmed) {
-          tag.textContent = "Lade herunter...";
+          tag.textContent = _("update_downloading");
           tag.className = "status-tag checking";
-          if (btn) {
-            btn.textContent = "⏬ Wird heruntergeladen...";
-            btn.disabled = true;
-          }
-          log(`📥 Update ${latestVersion} wird heruntergeladen...`, "info");
+          if (btn) btn.disabled = true;
+          if (btnText) btnText.textContent = _("update_downloading_btn");
+          log(`📥 Update ${latestVersion}: ${_("update_downloading")}`, "info");
 
           try {
-            await invoke("download_and_install_update", {
+            const msg = await invoke<string>("download_and_install_update", {
               downloadUrl: installerAsset.browser_download_url,
               filename: installerAsset.name,
             });
             
-            tag.textContent = "Installiert!";
+            tag.textContent = _("update_installed");
             tag.className = "status-tag update-available";
-            log("✅ Installer gestartet – App wird geschlossen...", "success");
+            log(msg || _("update_installer_started"), "success");
           } catch (installErr) {
-            tag.textContent = "Fehler";
+            tag.textContent = _("update_error");
             tag.className = "status-tag error";
-            log(`❌ Installation fehlgeschlagen: ${installErr}`, "error");
+            log(`❌ ${_("install_failed")}: ${installErr}`, "error");
             
-            // Fallback: Open download page
             const fallback = await confirm(
-              "Automatische Installation fehlgeschlagen. Möchtest du die Download-Seite öffnen?",
-              { title: "Fehler", kind: "warning" }
+              _("update_install_failed_fallback"),
+              { title: _("update_error"), kind: "warning" }
             );
             if (fallback) {
               await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
@@ -721,31 +792,31 @@ async function checkForUpdates(manual: boolean = false) {
           }
         }
       } else {
-        // No installer asset found, fallback to opening the page
         const confirmed = await confirm(
-          `Version ${latestVersion} ist verfügbar. Kein Installer gefunden – möchtest du die Download-Seite öffnen?`,
-          { title: "Update verfügbar", kind: "info" }
+          _("update_confirm_open_page", { version: latestVersion }),
+          { title: _("update_confirm_title"), kind: "info" }
         );
         if (confirmed) {
           await openUrl("https://github.com/Malionaro/Youtube-Soundcload/releases/latest");
         }
       }
     } else {
-      tag.textContent = "Aktuell";
+      tag.textContent = _("up_to_date");
       tag.className = "status-tag";
       if (manual) logKey("log_app_up_to_date", "success");
     }
   } catch (e) {
     console.warn("GitHub Update Check failed:", e);
     if (manual) {
-      tag.textContent = "Fehler";
+      tag.textContent = _("update_error");
       tag.className = "status-tag error";
       logKey("log_update_check_failed", "warning");
     }
   } finally {
-    if (manual && btn && document.contains(btn)) {
+    window.clearTimeout(timeoutId);
+    if (btn && document.contains(btn)) {
       btn.disabled = false;
-      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Auf Updates prüfen`;
+      if (btnText) btnText.textContent = _("check_updates");
     }
   }
 }
@@ -824,7 +895,7 @@ function setupEventListeners() {
     ($("auto-scroll-tracks-toggle") as HTMLInputElement).checked = config.auto_scroll_tracks !== false;
     ($("eco-mode-toggle") as HTMLInputElement).checked = config.eco_mode !== false;
     ($("auto-tagging-toggle") as HTMLInputElement).checked = config.auto_tagging !== false;
-    ($("accent-color-picker") as HTMLInputElement).value = config.accent_color || "#6c5ce7";
+    ($("accent-color-picker") as HTMLInputElement).value = config.accent_color || DEFAULT_ACCENT_COLOR;
     const afterDownloadSelect = document.getElementById("after-download-select") as HTMLSelectElement | null;
     if (afterDownloadSelect) afterDownloadSelect.value = config.after_download || "nothing";
     const sbMode = document.getElementById("sponsorblock-mode-select") as HTMLSelectElement | null;
@@ -846,10 +917,10 @@ function setupEventListeners() {
   });
 
   on("reset-theme-btn", "click", () => {
-    config.accent_color = "#6c5ce7";
+    config.accent_color = DEFAULT_ACCENT_COLOR;
     config.custom_background = "";
     const picker = document.getElementById("accent-color-picker") as HTMLInputElement;
-    if (picker) picker.value = "#6c5ce7";
+    if (picker) picker.value = DEFAULT_ACCENT_COLOR;
     applyTheme();
     saveConfig();
     logKey("log_theme_reset", "info");
@@ -870,6 +941,16 @@ function setupEventListeners() {
 
   on("settings-modal-close", "click", () => {
     ($("settings-modal") as HTMLElement).style.display = "none";
+  });
+  on("settings-modal", "click", (e) => {
+    if (e.target === $("settings-modal")) $("settings-modal").style.display = "none";
+  });
+  on("onboarding-modal", "click", (e) => {
+    if (e.target === $("onboarding-modal")) closeOnboarding();
+  });
+  on("github-link", "click", (e) => {
+    e.preventDefault();
+    void openUrl("https://github.com/Malionaro/Youtube-Soundcload").catch(() => {});
   });
 
   on("save-settings-btn", "click", async () => {
@@ -962,7 +1043,7 @@ function setupEventListeners() {
 
   on("queue-manual-input", "input", checkPlaylistUrlInput);
   on("history-clear-btn", "click", clearHistory);
-  on("queue-search-input", "input", renderQueue);
+  on("queue-search-input", "input", debounce(renderQueue, 120));
   on("queue-sort-select", "change", renderQueue);
   on("queue-retry-failed-btn", "click", retryFailedQueueItems);
 
@@ -1061,14 +1142,15 @@ function setupEventListeners() {
     void saveConfig();
   });
 
-  // Log search
-  on("log-search", "input", (e) => {
-    const query = (e.target as HTMLInputElement).value.toLowerCase();
+  // Log search (debounced)
+  const applyLogFilter = debounce(() => {
+    const query = (maybeElement("log-search") as HTMLInputElement | null)?.value.toLowerCase() || "";
     logOutput.querySelectorAll(".log-line").forEach((el) => {
       (el as HTMLElement).style.display =
-        el.textContent?.toLowerCase().includes(query) ? "" : "none";
+        !query || el.textContent?.toLowerCase().includes(query) ? "" : "none";
     });
-  });
+  }, 120);
+  on("log-search", "input", applyLogFilter);
 
   // Theme toggle
   on("theme-toggle", "click", toggleTheme);
@@ -1179,7 +1261,7 @@ function setupEventListeners() {
   // Install buttons
   on("install-ffmpeg-btn", "click", async (e) => {
     const btn = e.currentTarget as HTMLButtonElement;
-    if (!confirmInstall("FFmpeg", "Gyan.FFmpeg")) return;
+    if (!(await confirmInstall("FFmpeg", "Gyan.FFmpeg"))) return;
 
     const status = $("ffmpeg-status");
     btn.disabled = true;
@@ -1207,7 +1289,7 @@ function setupEventListeners() {
 
   on("install-ytdlp-btn", "click", async (e) => {
     const btn = e.currentTarget as HTMLButtonElement;
-    if (!confirmInstall("yt-dlp", "yt-dlp.yt-dlp")) return;
+    if (!(await confirmInstall("yt-dlp", "yt-dlp.yt-dlp"))) return;
 
     const status = $("ytdlp-status");
     btn.disabled = true;
@@ -1255,7 +1337,11 @@ function setupEventListeners() {
 
   on("install-pot-provider-btn", "click", async (e) => {
     const btn = e.currentTarget as HTMLButtonElement;
-    if (!window.confirm(_("install_pot_confirm"))) return;
+    const confirmed = await confirm(_("install_pot_confirm"), {
+      title: _("ytdlp_pot_title"),
+      kind: "info",
+    });
+    if (!confirmed) return;
 
     const status = $("pot-provider-status");
     btn.disabled = true;
@@ -1305,6 +1391,10 @@ function setupEventListeners() {
 
     // Close Modals: Escape
     if (e.key === "Escape") {
+      const onboarding = maybeElement("onboarding-modal");
+      if (onboarding && onboarding.style.display !== "none") {
+        closeOnboarding();
+      }
       const modals = document.querySelectorAll(".modal-overlay");
       modals.forEach(m => (m as HTMLElement).style.display = "none");
       hideDetectedUrlPrompt();
@@ -1332,16 +1422,25 @@ function setupTauriListeners() {
 
     // Global progress
     if (p.status === "downloading") {
+      convertingTracks.delete(p.current);
       const overallPercent = updateTotalProgress(p.current, p.percent);
-      downloadProgress.style.width = `${overallPercent}%`;
-      $("progress-percent").textContent = `${overallPercent.toFixed(1)}%`;
+      const clampedTrackPct = Math.max(0, Math.min(100, p.percent));
+      downloadProgress.style.width = `${clampedTrackPct}%`;
+      $("progress-percent").textContent = `${clampedTrackPct.toFixed(1)}%`;
       $("progress-label").textContent = _("progress_downloading", {
-        percent: overallPercent.toFixed(0),
+        percent: clampedTrackPct.toFixed(0),
         speed: p.speed || "...",
         eta: p.eta || "...",
       });
-      updateDiscordPresence(`Downloading: ${p.percent.toFixed(0)}%`, `${p.current}/${p.total} | ${p.title}`);
+      if (convertingTracks.size === 0) {
+        convertProgress.classList.remove("active");
+        convertProgress.style.width = "0%";
+        $("convert-label").textContent = _("conversion_waiting");
+      }
+      updateTrayStatus(`${overallPercent.toFixed(0)}% • ${p.title}`);
+      updateDiscordPresence(`Downloading: ${clampedTrackPct.toFixed(0)}%`, `${p.current}/${p.total} | ${p.title}`);
     } else if (p.status === "converting") {
+      convertingTracks.add(p.current);
       updateTotalProgress(p.current, 100);
       convertProgress.classList.add("active");
       convertProgress.style.width = "100%";
@@ -1355,11 +1454,12 @@ function setupTauriListeners() {
       const bar = card.querySelector(".track-progress-bar") as HTMLElement;
       const stat = card.querySelector(".track-stat") as HTMLElement;
       if (p.status === "downloading") {
+        const clampedTrackPct = Math.max(0, Math.min(100, p.percent));
         if (bar) {
-          bar.style.width = `${p.percent}%`;
+          bar.style.width = `${clampedTrackPct}%`;
           bar.style.background = "var(--accent)";
         }
-        if (stat) stat.textContent = `${p.percent.toFixed(0)}%`;
+        if (stat) stat.textContent = `${clampedTrackPct.toFixed(0)}%`;
       } else if (p.status === "converting") {
         if (bar) {
           bar.style.width = "100%";
@@ -1369,8 +1469,6 @@ function setupTauriListeners() {
       }
     }
   });
-
-    // Cleaned up unused track-complete listener
 
   listen<string>("download-log", (event) => {
     const line = event.payload;
@@ -1388,56 +1486,32 @@ function setupTauriListeners() {
     }
   });
 
-  listen<string>("download-finished", () => {
-    setDownloadUiState(false);
-
-    downloadProgress.classList.remove("active");
-    totalProgress.classList.remove("active");
-    convertProgress.classList.remove("active");
-
-    // Reset conversion label
-    $("convert-label").textContent = _("conversion_waiting");
-    convertProgress.style.width = "0%";
-
-    downloadProgress.style.width = "100%";
-    totalProgress.style.width = "100%";
-    setStatus(_("download_complete"), "success");
-    $("progress-label").textContent = _("download_complete");
-    log(`🎉 ${_("download_complete")} ${completedTracks}/${totalTracks}`, "success");
-    updateDiscordPresence(_("download_complete"), `${completedTracks}/${totalTracks} Tracks`);
-  });
-
-  listen<string>("download-error", (event) => {
-    setDownloadUiState(false);
-    downloadProgress.classList.remove("active");
-    totalProgress.classList.remove("active");
-    convertProgress.classList.remove("active");
-    setStatus(_("error_occurred"), "error");
-    logErrorDetails(event.payload);
-    updateDiscordPresence("Error occurred", event.payload);
-  });
-
   // Conversion events
   listen<{ status: string; percent: number; filename: string }>("convert-progress", (event) => {
     const p = event.payload;
     const bar = $("modal-convert-progress") as HTMLElement;
-    bar.style.width = `${p.percent}%`;
-    $("convert-status-text").textContent = `${_("converting")} ${p.percent.toFixed(0)}%`;
+    const clamped = Math.max(0, Math.min(100, p.percent));
+    bar.style.width = `${clamped}%`;
+    $("convert-status-text").textContent = `${_("converting")} ${clamped.toFixed(0)}% (${p.filename})`;
     $("convert-status-text").className = "status-text converting";
-    updateDiscordPresence(`Converting: ${p.percent.toFixed(0)}%`, p.filename);
+    updateDiscordPresence(`Converting: ${clamped.toFixed(0)}%`, p.filename);
   });
 
   listen<string>("convert-finished", (event) => {
-    $("convert-status-text").textContent = `${_("conversion_complete")} → ${event.payload}`;
-    $("convert-status-text").className = "status-text success";
-    $("modal-progress-container").style.display = "none";
+    if (!isConvertingBatch) {
+      $("convert-status-text").textContent = `${_("conversion_complete")} → ${event.payload}`;
+      $("convert-status-text").className = "status-text success";
+      $("modal-progress-container").style.display = "none";
+    }
     log(`✅ Converted: ${event.payload}`, "success");
   });
 
   listen<string>("convert-error", (event) => {
-    $("convert-status-text").textContent = _("conversion_failed");
-    $("convert-status-text").className = "status-text error";
-    $("modal-progress-container").style.display = "none";
+    if (!isConvertingBatch) {
+      $("convert-status-text").textContent = _("conversion_failed");
+      $("convert-status-text").className = "status-text error";
+      $("modal-progress-container").style.display = "none";
+    }
     logErrorDetails(event.payload, "Conversion");
   });
 
@@ -1500,7 +1574,8 @@ function stopClipboardWatcher() {
 }
 
 async function checkClipboardForMediaUrl() {
-  if (!config.auto_url_detection || isDownloading) return;
+  if (!config.auto_url_detection || isDownloading || clipboardCheckInFlight) return;
+  clipboardCheckInFlight = true;
 
   try {
     const text = await invoke<string>("read_clipboard_text");
@@ -1517,6 +1592,8 @@ async function checkClipboardForMediaUrl() {
     await notifyDetectedUrl(urls);
   } catch {
     // Clipboard can be temporarily locked by another app; ignore and try again.
+  } finally {
+    clipboardCheckInFlight = false;
   }
 }
 
@@ -1568,17 +1645,23 @@ function extractMediaUrls(text: string): string[] {
   return urls;
 }
 
+function matchesDomain(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
 function isSupportedMediaUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
     const host = parsed.hostname.toLowerCase();
     return (
       host === "youtu.be" ||
-      host.endsWith("youtube.com") ||
-      host.endsWith("soundcloud.com") ||
-      host.endsWith("spotify.com") ||
-      host === "music.apple.com" ||
-      host.endsWith(".music.apple.com")
+      matchesDomain(host, "youtube.com") ||
+      matchesDomain(host, "soundcloud.com") ||
+      host === "snd.sc" ||
+      matchesDomain(host, "spotify.com") ||
+      host === "spotify.link" ||
+      matchesDomain(host, "music.apple.com")
     );
   } catch {
     return false;
@@ -1683,10 +1766,11 @@ function isPlaylistQueueUrl(url: string): boolean {
     const host = parsed.hostname.toLowerCase();
     const path = parsed.pathname.toLowerCase();
     return (
-      parsed.searchParams.has("list") ||
-      (host.includes("spotify.com") && (path.includes("/playlist/") || path.includes("/album/"))) ||
-      (host.includes("music.apple.com") && (path.includes("/playlist/") || path.includes("/album/"))) ||
-      (host.includes("soundcloud.com") && path.includes("/sets/"))
+      ((host === "youtu.be" || matchesDomain(host, "youtube.com")) && parsed.searchParams.has("list")) ||
+      (matchesDomain(host, "spotify.com") && (path.includes("/playlist/") || path.includes("/album/"))) ||
+      (matchesDomain(host, "music.apple.com") &&
+        (path.includes("/playlist/") || (path.includes("/album/") && !parsed.searchParams.has("i")))) ||
+      (matchesDomain(host, "soundcloud.com") && path.includes("/sets/"))
     );
   } catch {
     return false;
@@ -1770,13 +1854,13 @@ function fallbackQueueTitle(url: string): string {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
-    if (host.includes("youtube.com") || host.includes("youtu.be")) return "YouTube Video / Musik";
-    if (host.includes("soundcloud.com")) return "SoundCloud Track";
-    if (host.includes("spotify.com")) return "Spotify Link";
-    if (host.includes("music.apple.com")) return "Apple Music Link";
-    return "Anderer Musik-Link";
+    if (host === "youtu.be" || matchesDomain(host, "youtube.com")) return "YouTube Video / Musik";
+    if (matchesDomain(host, "soundcloud.com") || host === "snd.sc") return "SoundCloud Track";
+    if (matchesDomain(host, "spotify.com") || host === "spotify.link") return "Spotify Link";
+    if (matchesDomain(host, "music.apple.com")) return "Apple Music Link";
+    return _("source_other");
   } catch {
-    return "Musik-Link";
+    return _("source_other");
   }
 }
 
@@ -1841,7 +1925,7 @@ function renderQueue() {
     const realIdx = clipboardQueue.findIndex(queueItem => queueItem.id === item.id);
     const card = document.createElement("div");
     card.className = `queue-card status-${item.status}`;
-    card.style.animationDelay = `${idx * 0.05}s`;
+    card.style.animationDelay = `${Math.min(idx, 12) * 0.03}s`;
 
     let sourceClass: string = item.sourceType;
     let sourceLabel = _("source_other");
@@ -1879,7 +1963,7 @@ function renderQueue() {
          <span class="queue-card-url" title="${escapeAttribute(item.url)}">${escapeHtml(item.url)}</span>
       </div>
       <div class="queue-card-actions">
-         <button class="queue-card-remove" title="Aus Korb löschen" data-idx="${realIdx}">
+         <button class="queue-card-remove" title="${escapeAttribute(_("queue_remove_title"))}" data-idx="${realIdx}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
          </button>
       </div>
@@ -1912,16 +1996,19 @@ function clearQueue() {
 }
 
 function startBatchDownload() {
+  if (isDownloading) {
+    logKey("log_auto_start_cancelled", "warning");
+    return;
+  }
   if (clipboardQueue.length === 0) return;
   if (!config.download_folder) {
     log(_("folder_placeholder") || "Bitte zuerst einen Zielordner wählen", "warning");
     return;
   }
 
-  logKey("log_batch_started", "info", { count: String(clipboardQueue.length) });
-
   const itemsToDownload = clipboardQueue.filter(item => item.status === "queued" || item.status === "error");
   if (itemsToDownload.length === 0) return;
+  logKey("log_batch_started", "info", { count: String(itemsToDownload.length) });
   itemsToDownload.forEach(item => item.status = "downloading");
   saveQueue();
   renderQueue();
@@ -1938,7 +2025,7 @@ function startBatchDownload() {
 
   // Set mode flag and visual settings
   isBatchQueueMode = true;
-  urlInput.value = "Sammelkorb Batch-Download";
+  urlInput.value = BATCH_PLACEHOLDER;
   updateDownloadBtnState();
 
   // Visually switch to the downloader tab
@@ -1948,7 +2035,7 @@ function startBatchDownload() {
   }
 
   // Trigger download process!
-  startDownload();
+  void startDownload();
 }
 
 function retryFailedQueueItems() {
@@ -2030,13 +2117,15 @@ async function importPlaylist(url: string, source: "clipboard" | "extension" | "
 
 // ─── Download Logic ──────────────────────────────────────────────────────────
 async function startDownload() {
+  if (isDownloading) return;
   const url = urlInput.value.trim();
   if (!url || !config.download_folder) {
     // Kein hängendes Batch-Flag bei Early-Return
     isBatchQueueMode = false;
     return;
   }
-  if (isBatchQueueMode) {
+  const wasBatchMode = isBatchQueueMode;
+  if (wasBatchMode) {
     lastFailedAction = () => startBatchDownload();
   } else {
     lastFailedAction = () => startDownload();
@@ -2046,10 +2135,13 @@ async function startDownload() {
   setDownloadUiState(true);
   setDownloadPaused(false);
   completedTracks = 0;
+  let succeededTracks = 0;
+  let failedTracks = 0;
   trackProgressByIndex = new Map();
+  convertingTracks = new Set();
   startTime = Date.now();
   
-  if (!isBatchQueueMode) {
+  if (!wasBatchMode) {
     playlistEntries = [];
     totalTracks = 0;
   } else {
@@ -2069,7 +2161,7 @@ async function startDownload() {
   try {
     await invoke("reset_download_cancel");
 
-    if (!isBatchQueueMode) {
+    if (!wasBatchMode) {
       // Step 1: Get playlist info
       const info = await invoke<PlaylistInfo>("get_playlist_info", {
         url,
@@ -2087,6 +2179,18 @@ async function startDownload() {
     // Reset batch queue mode flag
     isBatchQueueMode = false;
 
+    if (playlistEntries.length === 0) {
+      log(`⚠️ ${_("no_tracks_found")}`, "warning");
+      setStatus(_("no_tracks_found"), "warning");
+      setDownloadUiState(false);
+      await invoke("finish_download").catch(() => {});
+      if (urlInput.value === BATCH_PLACEHOLDER) {
+        urlInput.value = "";
+        updateDownloadBtnState();
+      }
+      return;
+    }
+
     log(_("tracks_found", { count: String(totalTracks) }), "success");
     $("progress-label").textContent = _("tracks_found", { count: String(totalTracks) });
 
@@ -2101,14 +2205,16 @@ async function startDownload() {
     const executing = new Set<Promise<void>>();
 
     for (let i = 0; i < playlistEntries.length; i++) {
-      if (!isDownloading) break; // User cancelled
+      if (!isDownloading || runId !== downloadRunId) break; // User cancelled
       
       const entry = playlistEntries[i];
-      const card = document.getElementById(`track-card-${i + 1}`);
+      const trackNum = i + 1;
+      const card = document.getElementById(`track-card-${trackNum}`);
       
-      // Create the task promise
-      const task = (async () => {
-        if (!isDownloading) return;
+      // Create the task promise and self-clean inside finally BEFORE settling
+      let task!: Promise<void>;
+      task = (async () => {
+        if (!isDownloading || runId !== downloadRunId) return;
         if (card) {
           card.classList.add("active");
           if (config.auto_scroll_tracks !== false) scrollTrackIntoView(card);
@@ -2123,10 +2229,13 @@ async function startDownload() {
               cookies_path: config.cookies_path || null,
               quality: qualitySelect.value,
             },
-            trackIndex: i + 1,
+            trackIndex: trackNum,
             totalTracks: totalTracks,
             trackTitle: entry.title
           });
+
+          if (runId !== downloadRunId) return;
+          succeededTracks++;
 
           if (card) {
             const bar = card.querySelector(".track-progress-bar") as HTMLElement;
@@ -2144,7 +2253,8 @@ async function startDownload() {
           }
           recordHistory({ title: entry.title, url: entry.url, format: formatSelect.value, quality: qualitySelect.value, status: "done" });
         } catch (e) {
-          if (!isDownloading) return;
+          if (!isDownloading || runId !== downloadRunId) return;
+          failedTracks++;
           logErrorDetails(e, entry.title);
           recordHistory({ title: entry.title, url: entry.url, format: formatSelect.value, quality: qualitySelect.value, status: "error" });
           const queueItem = clipboardQueue.find(item =>
@@ -2170,13 +2280,20 @@ async function startDownload() {
           if (card) {
             const bar = card.querySelector(".track-progress-bar") as HTMLElement;
             const stat = card.querySelector(".track-stat") as HTMLElement;
-            if (bar) bar.style.background = "var(--error)";
+            if (bar) bar.style.background = "var(--danger)";
             if (stat) stat.textContent = "❌";
           }
         } finally {
+          executing.delete(task);
+          convertingTracks.delete(trackNum);
+          if (convertingTracks.size === 0) {
+            convertProgress.classList.remove("active");
+            convertProgress.style.width = "0%";
+            $("convert-label").textContent = _("conversion_waiting");
+          }
           if (card) card.classList.remove("active");
-          if (isDownloading) {
-            trackProgressByIndex.delete(i + 1);
+          if (isDownloading && runId === downloadRunId) {
+            trackProgressByIndex.delete(trackNum);
             completedTracks++;
             updateTotalProgress();
           }
@@ -2184,7 +2301,6 @@ async function startDownload() {
       })();
 
       executing.add(task);
-      task.finally(() => executing.delete(task));
 
       // If we hit the limit, wait for at least one task to finish
       if (executing.size >= concurrencyLimit) {
@@ -2197,28 +2313,50 @@ async function startDownload() {
 
     if (isDownloading && runId === downloadRunId) {
       setDownloadUiState(false);
-      if (urlInput.value === "Sammelkorb Batch-Download") {
+      await invoke("finish_download").catch(() => {});
+      if (urlInput.value === BATCH_PLACEHOLDER) {
         urlInput.value = "";
         updateDownloadBtnState();
       }
 
-      downloadProgress.style.width = "100%";
-      convertProgress.style.width = "100%";
-      totalProgress.style.width = "100%";
-      setStatus(_("download_complete"), "success");
-      $("progress-label").textContent = _("download_complete");
-      log(`🎉 ${_("download_complete")} ${completedTracks}/${totalTracks}`, "success");
-      if (config.after_download && config.after_download !== "nothing") {
+      downloadProgress.classList.remove("active");
+      convertProgress.classList.remove("active");
+      totalProgress.classList.remove("active");
+      $("convert-label").textContent = _("conversion_waiting");
+      convertProgress.style.width = "0%";
+
+      if (failedTracks === 0) {
+        downloadProgress.style.width = "100%";
+        totalProgress.style.width = "100%";
+        setStatus(_("download_complete"), "success");
+        $("progress-label").textContent = _("download_complete");
+        log(`🎉 ${_("download_complete")} ${succeededTracks}/${totalTracks}`, "success");
+        updateDiscordPresence(_("download_complete"), `${succeededTracks}/${totalTracks} Tracks`, true);
+      } else {
+        const partialMsg = _("download_complete_partial", {
+          succeeded: String(succeededTracks),
+          total: String(totalTracks),
+          failed: String(failedTracks),
+        });
+        setStatus(partialMsg, succeededTracks > 0 ? "warning" : "error");
+        $("progress-label").textContent = partialMsg;
+        log(partialMsg, succeededTracks > 0 ? "warning" : "error");
+        updateDiscordPresence(partialMsg, `${succeededTracks}/${totalTracks} Tracks`, true);
+      }
+
+      if (succeededTracks > 0 && config.after_download && config.after_download !== "nothing") {
         logKey("log_executing_action", "info", { action: config.after_download });
         await invoke("execute_after_download_action", { action: config.after_download });
       }
     }
   } catch (e) {
     if (runId !== downloadRunId) return;
+    isBatchQueueMode = false;
     logErrorDetails(e);
     setStatus(_("error_occurred"), "error");
     setDownloadUiState(false);
-    if (urlInput.value === "Sammelkorb Batch-Download") {
+    await invoke("finish_download").catch(() => {});
+    if (urlInput.value === BATCH_PLACEHOLDER) {
       urlInput.value = "";
       updateDownloadBtnState();
     }
@@ -2232,10 +2370,10 @@ function createQueueId(): string {
 function detectQueueSourceType(url: string): QueueItem["sourceType"] {
   try {
     const host = new URL(url).hostname.toLowerCase();
-    if (host.includes("youtube.com") || host === "youtu.be") return "youtube";
-    if (host.includes("soundcloud.com")) return "soundcloud";
-    if (host.includes("spotify.com")) return "spotify";
-    if (host.includes("music.apple.com")) return "apple_music";
+    if (host === "youtu.be" || matchesDomain(host, "youtube.com")) return "youtube";
+    if (matchesDomain(host, "soundcloud.com") || host === "snd.sc") return "soundcloud";
+    if (matchesDomain(host, "spotify.com") || host === "spotify.link") return "spotify";
+    if (matchesDomain(host, "music.apple.com")) return "apple_music";
   } catch {}
   return "other";
 }
@@ -2376,9 +2514,11 @@ function renderHistory() {
   downloadHistory.forEach((item) => {
     const card = document.createElement("div");
     card.className = `queue-card status-${item.status}`;
+    const detectedSource = detectQueueSourceType(item.url);
+    const sourceClass = detectedSource === "apple_music" ? "apple-music" : detectedSource;
 
     card.innerHTML = `
-      <div class="queue-card-source ${item.status === "done" ? "youtube" : "other"}">
+      <div class="queue-card-source ${sourceClass}">
          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
       </div>
       <div class="queue-card-info">
@@ -2459,7 +2599,7 @@ async function cancelDownload() {
   // UI sofort zurücksetzen für besseres Feedback
   setDownloadUiState(false);
   setDownloadPaused(false);
-  if (urlInput.value === "Sammelkorb Batch-Download") {
+  if (urlInput.value === BATCH_PLACEHOLDER) {
     urlInput.value = "";
     updateDownloadBtnState();
   }
@@ -2511,24 +2651,51 @@ async function startConversion() {
   if (filesToConvert.length === 0) return;
   lastFailedAction = () => startConversion();
 
+  isConvertingBatch = filesToConvert.length > 1;
   $("modal-progress-container").style.display = "block";
   ($("modal-convert-progress") as HTMLElement).style.width = "0%";
   $("convert-status-text").textContent = _("converting");
   $("convert-status-text").className = "status-text converting";
   (getEl("start-convert-btn") as HTMLButtonElement).disabled = true;
 
+  let succeeded = 0;
+  let lastError: unknown = null;
   try {
-    for (const file of filesToConvert) {
-      $("convert-status-text").textContent = `${_("converting")} ${file.split(/[\\/]/).pop() || file}`;
-      await invoke("convert_file", {
-        request: { input_path: file, output_format: outputFormat, quality },
-      });
+    for (let i = 0; i < filesToConvert.length; i++) {
+      const file = filesToConvert[i];
+      const base = file.split(/[\\/]/).pop() || file;
+      ($("modal-convert-progress") as HTMLElement).style.width = "0%";
+      $("convert-status-text").textContent = filesToConvert.length > 1
+        ? `${_("converting")} (${i + 1}/${filesToConvert.length}) ${base}`
+        : `${_("converting")} ${base}`;
+      try {
+        await invoke("convert_file", {
+          request: { input_path: file, output_format: outputFormat, quality },
+        });
+        succeeded++;
+      } catch (fileErr) {
+        lastError = fileErr;
+      }
     }
-  } catch (e) {
-    $("convert-status-text").textContent = `❌ ${e}`;
-    $("convert-status-text").className = "status-text error";
-    $("modal-progress-container").style.display = "none";
+
+    if (isConvertingBatch) {
+      if (succeeded === filesToConvert.length) {
+        $("convert-status-text").textContent = _("conversion_summary", {
+          succeeded: String(succeeded),
+          total: String(filesToConvert.length),
+        });
+        $("convert-status-text").className = "status-text success";
+      } else {
+        $("convert-status-text").textContent = `${_("conversion_failed")} (${succeeded}/${filesToConvert.length})`;
+        $("convert-status-text").className = "status-text error";
+      }
+    } else if (lastError) {
+      $("convert-status-text").textContent = `❌ ${lastError}`;
+      $("convert-status-text").className = "status-text error";
+    }
   } finally {
+    isConvertingBatch = false;
+    $("modal-progress-container").style.display = "none";
     (getEl("start-convert-btn") as HTMLButtonElement).disabled = false;
   }
 }
@@ -2605,15 +2772,27 @@ async function checkSystem(autoShowModal: boolean = true) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function confirmInstall(tool: string, packageId: string): boolean {
-  return window.confirm(_("install_confirm", { tool, package: packageId }));
+async function confirmInstall(tool: string, packageId: string): Promise<boolean> {
+  try {
+    return await confirm(_("install_confirm", { tool, package: packageId }), {
+      title: _("system_check"),
+      kind: "info",
+    });
+  } catch {
+    return false;
+  }
 }
 
 function log(message: string, type: string = "info") {
   const line = document.createElement("div");
   line.className = `log-line ${type}`;
   const timestamp = new Date().toLocaleTimeString();
-  line.textContent = `[${timestamp}] ${message}`;
+  const fullText = `[${timestamp}] ${message}`;
+  line.textContent = fullText;
+  const activeQuery = (maybeElement("log-search") as HTMLInputElement | null)?.value.toLowerCase() || "";
+  if (activeQuery && !fullText.toLowerCase().includes(activeQuery)) {
+    line.style.display = "none";
+  }
   logOutput.appendChild(line);
   
   // Limit DOM nodes to prevent memory leaks
@@ -2638,7 +2817,7 @@ function setStatus(text: string, type: string = "info") {
   dot.className = "status-dot";
   if (type === "error") dot.classList.add("error");
   if (type === "warning") dot.classList.add("warning");
-  updateTrayStatus(text);
+  updateTrayStatus(text, true);
 }
 
 function updateDownloadBtnState() {
@@ -2655,7 +2834,7 @@ function setDownloadUiState(downloading: boolean) {
   (getEl("convert-btn") as HTMLButtonElement).disabled = downloading;
   if (!downloading) setDownloadPaused(false);
   updateDownloadBtnState();
-  updateTrayStatus(downloading ? _("downloading", { title: urlInput?.value || "…", current: completedTracks, total: totalTracks || "…" }) : _("ready"));
+  updateTrayStatus(downloading ? _("analyzing_url") : _("ready"), true);
 }
 
 function setDownloadPaused(paused: boolean) {
@@ -2666,7 +2845,7 @@ function setDownloadPaused(paused: boolean) {
   if (text) text.textContent = paused ? _("resume_download") : _("pause_download");
   if (pauseIcon) pauseIcon.style.display = paused ? "none" : "";
   if (playIcon) playIcon.style.display = paused ? "" : "none";
-  if (isDownloading) updateTrayStatus(paused ? _("download_paused") : _("downloading", { title: urlInput?.value || "…", current: completedTracks, total: totalTracks || "…" }));
+  if (isDownloading) updateTrayStatus(paused ? _("download_paused") : _("downloading", { title: urlInput?.value || "…", current: completedTracks, total: totalTracks || "…" }), true);
 }
 
 function resetProgress() {
@@ -2747,7 +2926,7 @@ function addTrackCard(entry: PlaylistEntry) {
   const card = document.createElement("div");
   card.className = "track-card";
   card.id = `track-card-${entry.index}`;
-  card.style.animationDelay = `${(entry.index - 1) * 0.05}s`;
+  card.style.animationDelay = `${Math.min(entry.index - 1, 12) * 0.03}s`;
 
   const thumb = document.createElement("img");
   thumb.className = "track-thumb";
@@ -2799,17 +2978,27 @@ function escapeAttribute(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
+function applyColorScheme(theme: "dark" | "light") {
+  document.documentElement.setAttribute("data-theme", theme);
+  $("theme-icon-dark").style.display = theme === "dark" ? "block" : "none";
+  $("theme-icon-light").style.display = theme === "light" ? "block" : "none";
+}
+
 function toggleTheme() {
-  const html = document.documentElement;
-  const isDark = html.getAttribute("data-theme") === "dark";
-  html.setAttribute("data-theme", isDark ? "light" : "dark");
-  $("theme-icon-dark").style.display = isDark ? "none" : "block";
-  $("theme-icon-light").style.display = isDark ? "block" : "none";
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  const nextTheme: "dark" | "light" = isDark ? "light" : "dark";
+  applyColorScheme(nextTheme);
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  } catch {
+    // ignore storage errors
+  }
 }
 
 function applyTheme() {
   const root = document.documentElement;
-  const accent = config.accent_color || "#6c5ce7";
+  const rawAccent = (config.accent_color || "").trim();
+  const accent = /^#[0-9a-fA-F]{6}$/.test(rawAccent) ? rawAccent : DEFAULT_ACCENT_COLOR;
   root.style.setProperty("--accent", accent);
   
   // Create derived colors from accent
@@ -2829,16 +3018,36 @@ function applyTheme() {
       overlay.className = "custom-bg-overlay";
       document.body.prepend(overlay);
     }
-    // Convert raw file path to asset URL at render time
-    // Guard against already-converted URLs from old config
     let bgUrl = config.custom_background;
     if (!bgUrl.startsWith("http") && !bgUrl.startsWith("asset:")) {
       bgUrl = convertFileSrc(bgUrl);
     }
-    console.log("[BG] Setting background image:", bgUrl);
-    overlay.style.backgroundImage = `url('${bgUrl}')`;
+    const escapedUrl = bgUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    overlay.style.backgroundImage = `url("${escapedUrl}")`;
   } else if (overlay) {
     overlay.remove();
+  }
+}
+
+function setRemoteStatusBadge(online: boolean) {
+  const pill = maybeElement("remote-status-pill");
+  const dot = maybeElement("remote-status-dot");
+  const label = maybeElement("remote-status-label");
+  if (!pill || !dot || !label) return;
+  if (online) {
+    pill.style.background = "rgba(0,225,186,0.1)";
+    pill.style.borderColor = "rgba(0,225,186,0.2)";
+    pill.style.color = "var(--primary)";
+    dot.style.background = "var(--primary)";
+    dot.style.boxShadow = "0 0 6px var(--primary)";
+    label.textContent = _("remote_status_online");
+  } else {
+    pill.style.background = "rgba(255,94,87,0.12)";
+    pill.style.borderColor = "rgba(255,94,87,0.3)";
+    pill.style.color = "var(--danger)";
+    dot.style.background = "var(--danger)";
+    dot.style.boxShadow = "0 0 6px var(--danger)";
+    label.textContent = _("remote_status_offline");
   }
 }
 
@@ -2846,20 +3055,31 @@ async function updateRemoteStatus() {
   try {
     const ip = await invoke<string>("ss_get_local_ip");
     const remoteUrl = `http://${ip}:3030`;
+    setRemoteStatusBadge(true);
     const qrPlaceholder = $("qr-placeholder");
     if (qrPlaceholder) {
       qrPlaceholder.innerHTML = `
         <div style="background: white; padding: 12px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%;">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(remoteUrl)}" 
+          <img id="remote-qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(remoteUrl)}" 
                alt="QR Code" style="width:120px;height:120px;display:block;" />
+          <div id="remote-qr-fallback" style="display:none;font-size:10px;color:#555;text-align:center;padding:8px 4px;">${escapeHtml(_("qr_offline_fallback"))}</div>
           <div style="display: flex; align-items: center; gap: 8px; background: #f5f5f7; padding: 4px 8px; border-radius: 8px; border: 1px solid #eee; width: 100%; justify-content: center;">
-            <code style="font-size:10px;color:#333;font-weight:700;font-family:monospace;white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ip}:3030</code>
-            <button id="copy-remote-url" class="btn-icon-copy" title="Kopieren">
+            <code style="font-size:10px;color:#333;font-weight:700;font-family:monospace;white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(ip)}:3030</code>
+            <button id="copy-remote-url" class="btn-icon-copy" title="${escapeAttribute(_("copy_url"))}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             </button>
           </div>
         </div>
       `;
+
+      const qrImg = maybeElement("remote-qr-img") as HTMLImageElement | null;
+      const qrFallback = maybeElement("remote-qr-fallback");
+      if (qrImg && qrFallback) {
+        qrImg.onerror = () => {
+          qrImg.style.display = "none";
+          qrFallback.style.display = "block";
+        };
+      }
 
       on("copy-remote-url", "click", async () => {
         try {
@@ -2877,6 +3097,7 @@ async function updateRemoteStatus() {
     }
   } catch (e) {
     console.error("Failed to get local IP", e);
+    setRemoteStatusBadge(false);
   }
 }
 
@@ -2985,3 +3206,326 @@ function applyTranslations() {
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", init);
+
+// ─── Team-Modus / P2P ────────────────────────────────────────────────────────
+
+interface TeamMember {
+  node_id: string;
+  name: string;
+  addr: string;
+  last_seen: number;
+  blocked: boolean;
+  online: boolean;
+}
+
+interface TeamTask {
+  id: string;
+  url: string;
+  title: string;
+  origin: string;
+  source: string;
+  status: string;
+  assigned_to: string;
+  attempts: number;
+  last_update: number;
+  percent: number;
+  error: string;
+  file_name: string;
+}
+
+interface TeamState {
+  active: boolean;
+  role: "none" | "host" | "member";
+  node_id: string;
+  node_name: string;
+  token: string;
+  team_id: string;
+  self_addr: string;
+  host_addr: string;
+  members: TeamMember[];
+  tasks: TeamTask[];
+  format: string;
+  quality: string;
+  folder: string;
+  share_files: boolean;
+  blocked_until: number;
+  worker_running: boolean;
+  last_error: string;
+}
+
+interface TeamInvite {
+  link: string;
+  token: string;
+  addr: string;
+  team_id: string;
+  node_id: string;
+}
+
+let teamState: TeamState | null = null;
+let teamPollTimer: number | null = null;
+
+function teamEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
+
+function teamShowError(msg: string) {
+  const el = teamEl("team-error");
+  if (el) el.textContent = msg;
+}
+
+async function initTeam() {
+  const createBtn = teamEl<HTMLButtonElement>("team-create-btn");
+  const joinBtn = teamEl<HTMLButtonElement>("team-join-btn");
+  const joinInput = teamEl<HTMLInputElement>("team-join-input");
+  const copyBtn = teamEl<HTMLButtonElement>("team-copy-link-btn");
+  const addBtn = teamEl<HTMLButtonElement>("team-add-playlist-btn");
+  const addInput = teamEl<HTMLInputElement>("team-add-playlist-input");
+  const startBtn = teamEl<HTMLButtonElement>("team-start-btn");
+  const stopBtn = teamEl<HTMLButtonElement>("team-stop-btn");
+  const pullBtn = teamEl<HTMLButtonElement>("team-pull-btn");
+  const leaveBtn = teamEl<HTMLButtonElement>("team-leave-btn");
+  if (!createBtn) return; // UI nicht vorhanden
+
+  const nameInput = () => teamEl<HTMLInputElement>("team-name-input")?.value.trim() || undefined;
+
+  createBtn.addEventListener("click", async () => {
+    try {
+      teamShowError("");
+      const invite = await invoke<TeamInvite>("team_create", {
+        name: nameInput(),
+        format: (document.getElementById("format-select") as HTMLSelectElement | null)?.value,
+        quality: (document.getElementById("quality-select") as HTMLSelectElement | null)?.value,
+        folder: config.download_folder || undefined,
+        shareFiles: true,
+        advertisedAddr: teamEl<HTMLInputElement>("team-advertised-input")?.value.trim() || undefined,
+      });
+      const linkBox = teamEl("team-link-box");
+      const linkOut = teamEl<HTMLInputElement>("team-link-output");
+      if (linkBox) linkBox.style.display = "flex";
+      if (linkOut) linkOut.value = invite.link;
+      await refreshTeam();
+    } catch (e) {
+      teamShowError(String(e));
+    }
+  });
+
+  joinBtn?.addEventListener("click", async () => {
+    const link = joinInput?.value.trim();
+    if (!link) return;
+    try {
+      teamShowError("");
+      await invoke<TeamState>("team_join", {
+        link,
+        name: nameInput(),
+        format: (document.getElementById("format-select") as HTMLSelectElement | null)?.value,
+        quality: (document.getElementById("quality-select") as HTMLSelectElement | null)?.value,
+        folder: config.download_folder || undefined,
+        shareFiles: true,
+      });
+      if (joinInput) joinInput.value = "";
+      await refreshTeam();
+    } catch (e) {
+      teamShowError(String(e));
+    }
+  });
+
+  copyBtn?.addEventListener("click", async () => {
+    const linkOut = teamEl<HTMLInputElement>("team-link-output");
+    if (!linkOut?.value) return;
+    try {
+      await navigator.clipboard.writeText(linkOut.value);
+    } catch {
+      linkOut.select();
+      document.execCommand("copy");
+    }
+    const old = copyBtn.textContent;
+    copyBtn.textContent = _("team_copied");
+    setTimeout(() => { copyBtn.textContent = old; }, 1200);
+  });
+
+  addBtn?.addEventListener("click", async () => {
+    const url = addInput?.value.trim();
+    if (!url) return;
+    try {
+      teamShowError("");
+      const n = await invoke<number>("team_add_playlist", {
+        url,
+        cookiesPath: config.cookies_path || null,
+      });
+      log(_("team_add_playlist") + `: +${n}`, "success");
+      if (addInput) addInput.value = "";
+      await refreshTeam();
+    } catch (e) {
+      teamShowError(String(e));
+    }
+  });
+
+  startBtn?.addEventListener("click", async () => {
+    try {
+      teamShowError("");
+      await invoke("team_start");
+      await refreshTeam();
+    } catch (e) {
+      teamShowError(String(e));
+    }
+  });
+
+  stopBtn?.addEventListener("click", async () => {
+    try { await invoke("team_stop"); await refreshTeam(); } catch (e) { teamShowError(String(e)); }
+  });
+
+  pullBtn?.addEventListener("click", async () => {
+    try {
+      const n = await invoke<number>("team_pull_missing");
+      log(_("team_pull_missing") + `: ${n}`, "success");
+    } catch (e) { teamShowError(String(e)); }
+  });
+
+  leaveBtn?.addEventListener("click", async () => {
+    try {
+      await invoke("team_leave");
+      const linkBox = teamEl("team-link-box");
+      if (linkBox) linkBox.style.display = "none";
+      teamState = null;
+      await refreshTeam();
+    } catch (e) { teamShowError(String(e)); }
+  });
+
+  // Selbstgehosteten Relay-Server verbinden
+  const relayBtn = teamEl<HTMLButtonElement>("team-connect-relay-btn");
+  const relayUrlEl = teamEl<HTMLInputElement>("team-relay-url");
+  const relayTokenEl = teamEl<HTMLInputElement>("team-relay-token");
+  // Default vom Backend
+  try {
+    const def = await invoke<string>("team_default_relay");
+    if (relayUrlEl && def) relayUrlEl.value = def;
+  } catch { /* ignore */ }
+  relayBtn?.addEventListener("click", async () => {
+    const token = relayTokenEl?.value.trim();
+    if (!token) { teamShowError(_("team_relay_token_placeholder")); return; }
+    try {
+      teamShowError("");
+      await invoke<TeamState>("team_connect_relay", {
+        relayUrl: relayUrlEl?.value.trim() || undefined,
+        token,
+        name: nameInput(),
+        format: (document.getElementById("format-select") as HTMLSelectElement | null)?.value,
+        quality: (document.getElementById("quality-select") as HTMLSelectElement | null)?.value,
+        folder: config.download_folder || undefined,
+        shareFiles: true,
+      });
+      await refreshTeam();
+    } catch (e) { teamShowError(String(e)); }
+  });
+
+  // Live-Updates aus dem Backend
+  try {
+    await listen<TeamState>("team-state-changed", (event) => {
+      teamState = event.payload;
+      renderTeam();
+    });
+    await listen<{ node_id: string; reason: string }>("team-blocked", (event) => {
+      log(_("team_blocked"), "error");
+      teamShowError(_("team_blocked") + (event.payload?.reason ? `: ${event.payload.reason}` : ""));
+    });
+  } catch { /* ignore */ }
+
+  // Polling-Fallback
+  await refreshTeam();
+  if (teamPollTimer) clearInterval(teamPollTimer);
+  teamPollTimer = window.setInterval(() => { void refreshTeam(); }, 1000);
+}
+
+async function refreshTeam() {
+  try {
+    teamState = await invoke<TeamState>("team_status");
+  } catch { /* ignore */ }
+  renderTeam();
+}
+
+function renderTeam() {
+  const badge = teamEl("team-role-badge");
+  const activeBox = teamEl("team-active-box");
+  const membersEl = teamEl("team-members");
+  const progressEl = teamEl("team-progress");
+  const tasksEl = teamEl("team-tasks");
+  const startBtn = teamEl<HTMLButtonElement>("team-start-btn");
+  const stopBtn = teamEl<HTMLButtonElement>("team-stop-btn");
+  if (!badge) return;
+
+  const t = teamState;
+  const active = !!t?.active;
+
+  if (!active) {
+    badge.textContent = _("team_off");
+    badge.style.color = "var(--text-secondary)";
+    if (activeBox) activeBox.style.display = "none";
+    return;
+  }
+
+  const roleLabel = t!.role === "host" ? _("team_role_host") : _("team_role_member");
+  badge.textContent = roleLabel;
+  badge.style.color = "var(--primary)";
+  if (activeBox) activeBox.style.display = "flex";
+
+  // Mitglieder
+  if (membersEl) {
+    const memberName = (m: TeamMember) =>
+      `${m.name || m.node_id}${m.node_id === t!.node_id ? " (du)" : ""}` +
+      `${m.online ? "" : " · offline"}${m.blocked ? " · gesperrt" : ""}`;
+    const list = (t!.members || []).map(m => memberName(m));
+    membersEl.innerHTML =
+      `<strong>${_("team_members")} (${list.length}):</strong> ` +
+      (list.length ? list.map(escapeHtmlTeam).join(", ") : _("team_no_members"));
+  }
+
+  // Fortschritt
+  const tasks = t!.tasks || [];
+  const done = tasks.filter(x => x.status === "done").length;
+  const failed = tasks.filter(x => x.status === "failed").length;
+  const activeN = tasks.filter(x => x.status === "assigned" || x.status === "downloading").length;
+  if (progressEl) {
+    progressEl.textContent =
+      _("team_progress", { done: String(done), total: String(tasks.length), active: String(activeN) }) +
+      (failed ? ` · ${failed} ${_("team_task_failed")}` : "") +
+      (t!.blocked_until && Date.now() < t!.blocked_until ? ` · ${_("team_blocked")}` : "");
+  }
+
+  if (startBtn) startBtn.style.display = t!.worker_running ? "none" : "";
+  if (stopBtn) stopBtn.style.display = t!.worker_running ? "" : "none";
+
+  // Task-Liste
+  if (tasksEl) {
+    const statusLabel = (s: string) => {
+      switch (s) {
+        case "done": return _("team_task_done");
+        case "failed": return _("team_task_failed");
+        case "downloading":
+        case "assigned": return _("team_task_downloading");
+        default: return _("team_task_queued");
+      }
+    };
+    const icon = (s: string) =>
+      s === "done" ? "✅" : s === "failed" ? "❌" : (s === "downloading" || s === "assigned") ? "⏳" : "•";
+    tasksEl.innerHTML = tasks.slice(0, 200).map(task => {
+      const who = task.assigned_to ? ` · ${escapeHtmlTeam(shortNode(t!, task.assigned_to))}` : "";
+      const pct = task.status === "downloading" ? ` ${Math.round(task.percent)}%` : "";
+      return `<div style="display:flex; justify-content:space-between; gap:8px; padding:4px 8px; background:var(--bg-hover); border-radius:6px;">
+        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${icon(task.status)} ${escapeHtmlTeam(task.title)}</span>
+        <span style="flex-shrink:0; color:var(--text-secondary);">${statusLabel(task.status)}${pct}${who}</span>
+      </div>`;
+    }).join("");
+  }
+}
+
+function shortNode(t: TeamState, nodeId: string): string {
+  const m = (t.members || []).find(x => x.node_id === nodeId);
+  return m?.name || nodeId.slice(0, 6);
+}
+
+function escapeHtmlTeam(s: string): string {
+  const map: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  return s.replace(/[&<>"']/g, c => map[c] || c);
+}
+
+document.addEventListener("DOMContentLoaded", initTeam);

@@ -1,0 +1,9 @@
+# frp server (frps) on the Raspberry Pi
+#   docker compose -f relay/docker-compose.frp.yml up -d
+services:
+  frps:
+    image: snowdreamtech/frps:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./frp/frps.toml:/etc/frp/frps.toml:ro

@@ -160,13 +160,178 @@ pub fn parse_ffmpeg_time(line: &str) -> Option<f64> {
 }
 
 pub fn parse_time_to_seconds(time_str: &str) -> Option<f64> {
-    let parts: Vec<&str> = time_str.split(':').collect();
+    let trimmed = time_str.trim();
+    if trimmed.starts_with('-') {
+        return None;
+    }
+    let parts: Vec<&str> = trimmed.split(':').collect();
     if parts.len() == 3 {
         let hours: f64 = parts[0].parse().ok()?;
         let minutes: f64 = parts[1].parse().ok()?;
         let seconds: f64 = parts[2].parse().ok()?;
+        if !hours.is_finite()
+            || !minutes.is_finite()
+            || !seconds.is_finite()
+            || hours.is_sign_negative()
+            || minutes.is_sign_negative()
+            || seconds.is_sign_negative()
+        {
+            return None;
+        }
         Some(hours * 3600.0 + minutes * 60.0 + seconds)
     } else {
         None
+    }
+}
+
+/// Single-pass HTML entity decoder (avoids double-decoding `&amp;lt;`).
+pub fn decode_html_entities(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut rest = input;
+    while let Some(amp_idx) = rest.find('&') {
+        out.push_str(&rest[..amp_idx]);
+        let after_amp = &rest[amp_idx + 1..];
+        if let Some(semi_idx) = after_amp.find(';') {
+            if semi_idx > 0 && semi_idx <= 12 {
+                let entity = &after_amp[..semi_idx];
+                let decoded: Option<char> = match entity {
+                    "amp" => Some('&'),
+                    "lt" => Some('<'),
+                    "gt" => Some('>'),
+                    "quot" => Some('"'),
+                    "apos" => Some('\''),
+                    "nbsp" => Some(' '),
+                    s if s.starts_with("#x") || s.starts_with("#X") => {
+                        u32::from_str_radix(&s[2..], 16).ok().and_then(char::from_u32)
+                    }
+                    s if s.starts_with('#') => {
+                        s[1..].parse::<u32>().ok().and_then(char::from_u32)
+                    }
+                    _ => None,
+                };
+                if let Some(ch) = decoded {
+                    out.push(ch);
+                    rest = &after_amp[semi_idx + 1..];
+                    continue;
+                }
+            }
+        }
+        out.push('&');
+        rest = after_amp;
+    }
+    out.push_str(rest);
+    out
+}
+
+pub fn mime_type_for_filename(name: &str) -> &'static str {
+    let ext = std::path::Path::new(name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "mp3" => "audio/mpeg",
+        "m4a" => "audio/mp4",
+        "wav" => "audio/wav",
+        "flac" => "audio/flac",
+        "ogg" => "audio/ogg",
+        "opus" => "audio/opus",
+        "aac" => "audio/aac",
+        "aiff" => "audio/aiff",
+        "wma" => "audio/x-ms-wma",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "mov" => "video/quicktime",
+        "avi" => "video/x-msvideo",
+        "flv" => "video/x-flv",
+        "wmv" => "video/x-ms-wmv",
+        "3gp" => "video/3gpp",
+        _ => "application/octet-stream",
+    }
+}
+
+pub fn is_video_format(fmt: &str) -> bool {
+    matches!(
+        fmt.to_ascii_lowercase().as_str(),
+        "mp4" | "webm" | "mkv" | "avi" | "mov" | "flv" | "wmv" | "3gp"
+    )
+}
+
+pub fn is_lossless_audio_format(fmt: &str) -> bool {
+    matches!(
+        fmt.to_ascii_lowercase().as_str(),
+        "wav" | "flac" | "alac" | "aiff"
+    )
+}
+
+pub fn sanitize_sponsorblock_categories(raw: &str) -> String {
+    let cleaned: Vec<String> = raw
+        .split(',')
+        .map(|part| {
+            part.trim()
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+                .collect::<String>()
+        })
+        .filter(|part| !part.is_empty())
+        .collect();
+
+    if cleaned.is_empty() {
+        "sponsor,selfpromo,interaction".to_string()
+    } else {
+        cleaned.join(",")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_html_entities_single_pass_prevents_double_decode() {
+        assert_eq!(decode_html_entities("Rock &amp; Roll"), "Rock & Roll");
+        assert_eq!(decode_html_entities("&amp;lt;script&amp;gt;"), "&lt;script&gt;");
+        assert_eq!(decode_html_entities("Don&#39;t &quot;Stop&quot; &#x266A;"), "Don't \"Stop\" ♪");
+        assert_eq!(decode_html_entities("no &unknown; entity"), "no &unknown; entity");
+    }
+
+    #[test]
+    fn ffmpeg_duration_and_time_parsing() {
+        assert_eq!(
+            parse_ffmpeg_duration("  Duration: 01:02:03.50, start: 0.000000, bitrate: 320 kb/s"),
+            Some(3723.5)
+        );
+        assert_eq!(
+            parse_ffmpeg_time("size= 1024kB time=00:01:30.25 bitrate= 192.0kbits/s"),
+            Some(90.25)
+        );
+        assert_eq!(parse_time_to_seconds("N/A"), None);
+        assert_eq!(parse_time_to_seconds("-00:01:00"), None);
+        assert_eq!(parse_time_to_seconds("00:NaN:00"), None);
+    }
+
+    #[test]
+    fn mime_and_format_helpers() {
+        assert_eq!(mime_type_for_filename("song.MP3"), "audio/mpeg");
+        assert_eq!(mime_type_for_filename("clip.mp4"), "video/mp4");
+        assert_eq!(mime_type_for_filename("song.flac"), "audio/flac");
+        assert_eq!(mime_type_for_filename("unknown.xyz"), "application/octet-stream");
+        assert!(is_video_format("MKV"));
+        assert!(!is_video_format("mp3"));
+        assert!(is_lossless_audio_format("FLAC"));
+        assert!(!is_lossless_audio_format("mp3"));
+    }
+
+    #[test]
+    fn sponsorblock_categories_sanitized() {
+        assert_eq!(
+            sanitize_sponsorblock_categories(" sponsor , selfpromo;rm -rf / , intro "),
+            "sponsor,selfpromorm-rf,intro"
+        );
+        assert_eq!(
+            sanitize_sponsorblock_categories("   ,,,   "),
+            "sponsor,selfpromo,interaction"
+        );
     }
 }

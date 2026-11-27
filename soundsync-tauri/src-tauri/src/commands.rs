@@ -64,7 +64,7 @@ pub fn load_config(state: State<AppState>) -> Result<AppConfig, String> {
         let content = fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
         match serde_json::from_str::<AppConfig>(&content) {
             Ok(config) => {
-                let mut state_config = state.config.lock().unwrap();
+                let mut state_config = lock_unpoisoned(&state.config);
                 *state_config = config.clone();
                 Ok(config)
             }
@@ -73,7 +73,7 @@ pub fn load_config(state: State<AppState>) -> Result<AppConfig, String> {
                 let backup = config_path.with_extension("json.corrupt.bak");
                 let _ = fs::write(&backup, &content);
                 let config = AppConfig::default();
-                let mut state_config = state.config.lock().unwrap();
+                let mut state_config = lock_unpoisoned(&state.config);
                 *state_config = config.clone();
                 Err(format!(
                     "Config korrupt (Backup: {}): {}. Defaults geladen.",
@@ -84,7 +84,7 @@ pub fn load_config(state: State<AppState>) -> Result<AppConfig, String> {
         }
     } else {
         let config = AppConfig::default();
-        let mut state_config = state.config.lock().unwrap();
+        let mut state_config = lock_unpoisoned(&state.config);
         *state_config = config.clone();
         Ok(config)
     }
@@ -98,14 +98,14 @@ pub fn save_config(state: State<AppState>, config: AppConfig) -> Result<(), Stri
     }
     let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&config_path, json).map_err(|e| e.to_string())?;
-    let mut state_config = state.config.lock().unwrap();
+    let mut state_config = lock_unpoisoned(&state.config);
     *state_config = config;
     Ok(())
 }
 
 #[tauri::command]
 pub fn update_remote_queue(state: State<AppState>, queue: Vec<RemoteQueueItem>) -> Result<(), String> {
-    let mut remote_queue = state.remote_queue.lock().unwrap();
+    let mut remote_queue = lock_unpoisoned(&state.remote_queue);
     *remote_queue = queue;
     Ok(())
 }
@@ -122,67 +122,71 @@ pub async fn update_discord_presence(
     details: String,
     state_msg: String,
 ) -> Result<(), String> {
-    use discord_rich_presence::DiscordIpc;
-
-    let discord_rpc_enabled = { state.config.lock().unwrap().discord_rpc };
+    let discord_rpc_enabled = { lock_unpoisoned(&state.config).discord_rpc };
+    let should_clear = !discord_rpc_enabled || (details.trim().is_empty() && state_msg.trim().is_empty());
     let details = sanitize_discord_text(&details, "SoundSync Downloader");
     let state_msg = sanitize_discord_text(&state_msg, "Idle");
+    let discord_arc = state.discord_client.clone();
 
-    if !discord_rpc_enabled || details.is_empty() || state_msg.is_empty() {
-        let mut client_lock = state.discord_client.lock().unwrap();
-        if let Some(mut client) = client_lock.take() {
-            let _ = client.client.close();
+    tokio::task::spawn_blocking(move || {
+        use discord_rich_presence::{activity, DiscordIpc};
+
+        if should_clear {
+            let mut client_lock = lock_unpoisoned(&discord_arc);
+            if let Some(mut client) = client_lock.take() {
+                let _ = client.client.close();
+            }
+            return Ok(());
         }
-        return Ok(());
-    }
 
-    let mut client_lock = state.discord_client.lock().unwrap();
+        let mut client_lock = lock_unpoisoned(&discord_arc);
 
-    if client_lock.is_none() {
-        *client_lock = Some(connect_discord_client()?);
-    }
-
-    if let Some(discord) = client_lock.as_mut() {
-        use discord_rich_presence::activity;
-
-        let assets = activity::Assets::new().large_image("logo");
-        let buttons = vec![activity::Button::new(
-            "Download",
-            "https://github.com/Malionaro/Youtube-Soundcload",
-        )];
-        let activity = activity::Activity::new()
-            .details(&details)
-            .state(&state_msg)
-            .assets(assets)
-            .buttons(buttons)
-            .timestamps(activity::Timestamps::new().start(discord.start_time));
-
-        if let Err(e) = discord.client.set_activity(activity) {
-            let first_error = e.to_string();
+        if client_lock.is_none() {
             *client_lock = Some(connect_discord_client()?);
+        }
 
-            if let Some(discord) = client_lock.as_mut() {
-                let assets = activity::Assets::new().large_image("logo");
-                let buttons = vec![activity::Button::new(
-                    "Download",
-                    "https://github.com/Malionaro/Youtube-Soundcload",
-                )];
-                let activity = activity::Activity::new()
-                    .details(&details)
-                    .state(&state_msg)
-                    .assets(assets)
-                    .buttons(buttons)
-                    .timestamps(activity::Timestamps::new().start(discord.start_time));
+        if let Some(discord) = client_lock.as_mut() {
+            let assets = activity::Assets::new().large_image("logo");
+            let buttons = vec![activity::Button::new(
+                "Download",
+                "https://github.com/Malionaro/Youtube-Soundcload",
+            )];
+            let act = activity::Activity::new()
+                .details(&details)
+                .state(&state_msg)
+                .assets(assets)
+                .buttons(buttons)
+                .timestamps(activity::Timestamps::new().start(discord.start_time));
 
-                if let Err(e) = discord.client.set_activity(activity) {
-                    *client_lock = None;
-                    return Err(format!("{}; reconnect failed: {}", first_error, e));
+            if let Err(e) = discord.client.set_activity(act) {
+                let first_error = e.to_string();
+                *client_lock = Some(connect_discord_client()?);
+
+                if let Some(discord) = client_lock.as_mut() {
+                    let assets = activity::Assets::new().large_image("logo");
+                    let buttons = vec![activity::Button::new(
+                        "Download",
+                        "https://github.com/Malionaro/Youtube-Soundcload",
+                    )];
+                    let act = activity::Activity::new()
+                        .details(&details)
+                        .state(&state_msg)
+                        .assets(assets)
+                        .buttons(buttons)
+                        .timestamps(activity::Timestamps::new().start(discord.start_time));
+
+                    if let Err(e) = discord.client.set_activity(act) {
+                        *client_lock = None;
+                        return Err(format!("{}; reconnect failed: {}", first_error, e));
+                    }
                 }
             }
         }
-    }
 
-    Ok(())
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn connect_discord_client() -> Result<DiscordClient, String> {
@@ -195,41 +199,48 @@ fn connect_discord_client() -> Result<DiscordClient, String> {
 
     let start_time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
 
     Ok(DiscordClient { client, start_time })
 }
 
 fn validate_discord_application_id() -> Result<(), String> {
-    let url = format!(
-        "https://discord.com/api/v10/oauth2/applications/{}/rpc",
-        DISCORD_CLIENT_ID
-    );
+    use std::sync::OnceLock;
+    static VALIDATED: OnceLock<Result<(), String>> = OnceLock::new();
 
-    let result = ureq::get(&url)
-        .timeout(std::time::Duration::from_secs(3))
-        .call();
+    VALIDATED
+        .get_or_init(|| {
+            let url = format!(
+                "https://discord.com/api/v10/oauth2/applications/{}/rpc",
+                DISCORD_CLIENT_ID
+            );
 
-    match result {
-        Ok(_) => Ok(()),
-        Err(ureq::Error::Status(404, response)) => {
-            let body = response.into_string().unwrap_or_default();
-            if body.contains("Unknown Application") {
-                Err(format!(
-                    "Discord App-ID {} ist unbekannt. Rich Presence braucht eine gültige Discord Developer Application Client ID.",
-                    DISCORD_CLIENT_ID
-                ))
-            } else {
-                Err(format!("Discord App-ID {} wurde nicht gefunden.", DISCORD_CLIENT_ID))
+            let result = ureq::get(&url)
+                .timeout(std::time::Duration::from_secs(3))
+                .call();
+
+            match result {
+                Ok(_) => Ok(()),
+                Err(ureq::Error::Status(404, response)) => {
+                    let body = response.into_string().unwrap_or_default();
+                    if body.contains("Unknown Application") {
+                        Err(format!(
+                            "Discord App-ID {} ist unbekannt. Rich Presence braucht eine gültige Discord Developer Application Client ID.",
+                            DISCORD_CLIENT_ID
+                        ))
+                    } else {
+                        Err(format!("Discord App-ID {} wurde nicht gefunden.", DISCORD_CLIENT_ID))
+                    }
+                }
+                Err(ureq::Error::Status(status, _)) => Err(format!(
+                    "Discord App-ID {} konnte nicht geprüft werden (HTTP {}).",
+                    DISCORD_CLIENT_ID, status
+                )),
+                Err(_) => Ok(()),
             }
-        }
-        Err(ureq::Error::Status(status, _)) => Err(format!(
-            "Discord App-ID {} konnte nicht geprüft werden (HTTP {}).",
-            DISCORD_CLIENT_ID, status
-        )),
-        Err(_) => Ok(()),
-    }
+        })
+        .clone()
 }
 
 fn sanitize_discord_text(value: &str, fallback: &str) -> String {
@@ -239,19 +250,23 @@ fn sanitize_discord_text(value: &str, fallback: &str) -> String {
 }
 
 #[tauri::command]
-pub fn check_system() -> SystemCheckResult {
-    let (ffmpeg_installed, ffmpeg_version) = check_tool("ffmpeg", &["-version"]);
-    let (ytdlp_installed, ytdlp_version) = check_tool("yt-dlp", &["--version"]);
-    let (pot_provider_installed, pot_provider_status) = check_pot_provider_files();
+pub async fn check_system() -> Result<SystemCheckResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let (ffmpeg_installed, ffmpeg_version) = check_tool("ffmpeg", &["-version"]);
+        let (ytdlp_installed, ytdlp_version) = check_tool("yt-dlp", &["--version"]);
+        let (pot_provider_installed, pot_provider_status) = check_pot_provider_files();
 
-    SystemCheckResult {
-        ffmpeg_installed,
-        ffmpeg_version,
-        ytdlp_installed,
-        ytdlp_version,
-        pot_provider_installed,
-        pot_provider_status,
-    }
+        SystemCheckResult {
+            ffmpeg_installed,
+            ffmpeg_version,
+            ytdlp_installed,
+            ytdlp_version,
+            pot_provider_installed,
+            pot_provider_status,
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "windows")]
@@ -303,10 +318,57 @@ fn check_pot_provider_files() -> (bool, String) {
 
 #[cfg(not(target_os = "windows"))]
 fn check_pot_provider_files() -> (bool, String) {
-    (
-        false,
-        "Auto-setup for PO-Token Provider is currently only supported on Windows".to_string(),
-    )
+    let home = match std::env::var("HOME") {
+        Ok(value) => PathBuf::from(value),
+        Err(_) => return (false, "HOME not found".to_string()),
+    };
+    let config_home = std::env::var("XDG_CONFIG_HOME")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".config"));
+    let data_home = std::env::var("XDG_DATA_HOME")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".local").join("share"));
+
+    let plugin_zip = config_home
+        .join("yt-dlp")
+        .join("plugins")
+        .join("bgutil-ytdlp-pot-provider.zip");
+    let provider_script = data_home
+        .join("soundsync")
+        .join("bgutil-ytdlp-pot-provider")
+        .join("server")
+        .join("build")
+        .join("generate_once.js");
+    let (node_available, node_version) = check_tool("node", &["--version"]);
+
+    if plugin_zip.exists() && provider_script.exists() && node_available {
+        (
+            true,
+            format!(
+                "Active: Plugin installed, provider script built, Node {}",
+                node_version
+            ),
+        )
+    } else {
+        let mut missing = Vec::new();
+        if !plugin_zip.exists() {
+            missing.push("Plugin ZIP");
+        }
+        if !provider_script.exists() {
+            missing.push("Provider Script");
+        }
+        if !node_available {
+            missing.push("Node.js");
+        }
+        (
+            false,
+            format!("Not set up: {} missing", missing.join(", ")),
+        )
+    }
 }
 
 #[tauri::command]
@@ -331,8 +393,6 @@ pub async fn get_playlist_info(
         "--no-warnings".to_string(),
         "-i".to_string(),
         "--no-color".to_string(),
-        "--extractor-args".to_string(),
-        "youtube:player_client=android".to_string(),
     ];
     #[cfg(target_os = "windows")]
     args.push("--windows-filenames".to_string());
@@ -367,13 +427,17 @@ pub async fn get_playlist_info(
     let mut entries = Vec::new();
     let mut playlist_title = String::from("Downloads");
 
-    for (idx, line) in stdout.lines().enumerate() {
+    for line in stdout.lines() {
         if line.trim().is_empty() {
             continue;
         }
         if let Ok(info) = serde_json::from_str::<serde_json::Value>(line) {
-            let title = playlist_entry_title(&info, idx);
+            let next_idx = entries.len();
+            let title = playlist_entry_title(&info, next_idx);
             let entry_url = playlist_entry_url(&info);
+            if entry_url.is_empty() {
+                continue;
+            }
 
             let thumbnail = info
                 .get("thumbnail")
@@ -390,9 +454,11 @@ pub async fn get_playlist_info(
 
             let duration = info.get("duration").and_then(|v| v.as_f64());
 
-            if idx == 0 {
+            if next_idx == 0 {
                 if let Some(pt) = info.get("playlist_title").and_then(|v| v.as_str()) {
-                    playlist_title = pt.to_string();
+                    if !pt.trim().is_empty() {
+                        playlist_title = pt.to_string();
+                    }
                 }
             }
 
@@ -401,7 +467,7 @@ pub async fn get_playlist_info(
                 url: entry_url,
                 thumbnail,
                 duration,
-                index: idx + 1,
+                index: next_idx + 1,
             });
         }
     }
@@ -427,7 +493,7 @@ fn playlist_entry_title(info: &serde_json::Value, idx: usize) -> String {
     for key in ["webpage_url", "original_url", "url"] {
         if let Some(value) = info.get(key).and_then(|v| v.as_str()) {
             if let Some(name) = value.trim_end_matches('/').rsplit('/').next() {
-                let name = name.replace('-', " ").replace('_', " ");
+                let name = name.replace(['-', '_'], " ");
                 let trimmed = name.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with("http") {
                     return trimmed.to_string();
@@ -449,10 +515,26 @@ fn playlist_entry_url(info: &serde_json::Value) -> String {
         }
     }
 
-    info.get("url")
+    // Flat YouTube playlist entries often emit just the video ID in `url`/`id`
+    let candidate = info
+        .get("url")
+        .or_else(|| info.get("id"))
         .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string()
+        .map(str::trim)
+        .unwrap_or("");
+    let ie_key = info
+        .get("ie_key")
+        .or_else(|| info.get("extractor"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if !candidate.is_empty()
+        && !candidate.contains('/')
+        && ie_key.to_ascii_lowercase().contains("youtube")
+    {
+        return format!("https://www.youtube.com/watch?v={}", candidate);
+    }
+
+    candidate.to_string()
 }
 
 #[tauri::command]
@@ -464,7 +546,7 @@ pub async fn search_videos(query: String) -> Result<PlaylistInfo, String> {
 #[tauri::command]
 pub async fn search_playlists(query: String) -> Result<PlaylistInfo, String> {
     let resolved_url = format!(
-        "https://www.youtube.com/results?search_query={}&sp=EgIQAw%253D%253D",
+        "https://www.youtube.com/results?search_query={}&sp=EgIQAw%3D%3D",
         urlencoding::encode(&query)
     );
     get_playlist_info(resolved_url, None).await
@@ -479,12 +561,17 @@ pub async fn get_trending_videos() -> Result<PlaylistInfo, String> {
 
 #[tauri::command]
 pub async fn reset_download_cancel(state: State<'_, AppState>) -> Result<(), String> {
-    let mut abort = state.abort_flag.lock().unwrap();
-    *abort = false;
-    let mut paused = state.pause_flag.lock().unwrap();
-    *paused = false;
-    let mut downloading = state.is_downloading.lock().unwrap();
-    *downloading = true;
+    *lock_unpoisoned(&state.abort_flag) = false;
+    *lock_unpoisoned(&state.pause_flag) = false;
+    *lock_unpoisoned(&state.is_downloading) = true;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn finish_download(state: State<'_, AppState>) -> Result<(), String> {
+    *lock_unpoisoned(&state.is_downloading) = false;
+    *lock_unpoisoned(&state.pause_flag) = false;
+    *lock_unpoisoned(&state.current_progress) = None;
     Ok(())
 }
 
@@ -499,7 +586,7 @@ pub async fn download_track(
 ) -> Result<String, String> {
     // Check if aborted
     {
-        let abort = state.abort_flag.lock().unwrap();
+        let abort = lock_unpoisoned(&state.abort_flag);
         if *abort {
             return Err("Cancelled".to_string());
         }
@@ -519,14 +606,21 @@ pub async fn download_track(
     ];
     let is_audio = audio_formats.contains(&format.as_str());
 
+    let output_template = PathBuf::from(&folder)
+        .join("%(title)s.%(ext)s")
+        .to_string_lossy()
+        .to_string();
+
     let mut args: Vec<String> = vec![
         "--newline".to_string(),
         "--no-color".to_string(),
         "--progress".to_string(),
         "-o".to_string(),
-        format!("{}/%(title)s.%(ext)s", folder),
-        "--extractor-args".to_string(),
-        "youtube:player_client=android".to_string(), // Bypass some DRM
+        output_template,
+        "--retries".to_string(),
+        "10".to_string(),
+        "--fragment-retries".to_string(),
+        "10".to_string(),
         "--postprocessor-args".to_string(),
         "ffmpeg:-threads 0".to_string(),
     ];
@@ -576,38 +670,45 @@ pub async fn download_track(
     if let Some(ref cp) = cookies {
         if !cp.is_empty() && std::path::Path::new(cp).exists() {
             args.extend(["--cookies".to_string(), cp.clone()]);
+        } else if !cp.is_empty() {
+            let _ = app.emit(
+                "download-log",
+                format!("WARNING: Cookies-Datei nicht gefunden, wird ignoriert: {}", cp),
+            );
         }
     }
 
     // AI Tagging & Metadata
-    let auto_tagging = { state.config.lock().unwrap().auto_tagging };
+    let auto_tagging = { lock_unpoisoned(&state.config).auto_tagging };
     if auto_tagging {
-        args.extend([
-            "--embed-metadata".to_string(),
-            "--embed-thumbnail".to_string(),
-            "--convert-thumbnails".to_string(),
-            "jpg".to_string(),
-        ]);
+        args.push("--embed-metadata".to_string());
+        // Thumbnails cannot be embedded into these containers; yt-dlp fails otherwise
+        let no_thumb_formats = ["wav", "aiff", "aac", "wma", "alac"];
+        if !no_thumb_formats.contains(&format.as_str()) {
+            args.extend([
+                "--embed-thumbnail".to_string(),
+                "--convert-thumbnails".to_string(),
+                "jpg".to_string(),
+            ]);
+        }
     }
 
-    // SponsorBlock (nur YouTube, nur wenn nicht "off")
+    // SponsorBlock (nur YouTube / ytsearch, nur wenn nicht "off")
     {
-        let cfg = state.config.lock().unwrap();
+        let cfg = lock_unpoisoned(&state.config);
         let mode = cfg.sponsorblock_mode.clone();
         let cats = cfg.sponsorblock_categories.clone();
         drop(cfg);
-        let is_youtube = url.contains("youtube.com") || url.contains("youtu.be") || url.contains("music.youtube.com");
+        let is_youtube = url.contains("youtube.com")
+            || url.contains("youtu.be")
+            || url.contains("music.youtube.com")
+            || url.starts_with("ytsearch");
         if is_youtube && (mode == "mark" || mode == "remove") {
-            let cats = cats.trim();
-            let cats = if cats.is_empty() {
-                "sponsor,selfpromo,interaction".to_string()
-            } else {
-                cats.to_string()
-            };
+            let safe_cats = sanitize_sponsorblock_categories(&cats);
             if mode == "mark" {
-                args.extend(["--sponsorblock-mark".to_string(), cats]);
+                args.extend(["--sponsorblock-mark".to_string(), safe_cats]);
             } else {
-                args.extend(["--sponsorblock-remove".to_string(), cats]);
+                args.extend(["--sponsorblock-remove".to_string(), safe_cats]);
             }
         }
     }
@@ -634,180 +735,186 @@ pub async fn download_track(
         };
         let child_id = child.id();
         {
-            let mut pids = active_download_pids.lock().unwrap();
+            let mut pids = lock_unpoisoned(&active_download_pids);
             pids.push(child_id);
         }
 
         let mut downloaded_paths: Vec<String> = Vec::new();
         let mut already_downloaded = false;
-        let mut stderr_tail: Vec<String> = Vec::new();
+
+        // Drain stderr in parallel; reading it only after stdout can deadlock
+        // when yt-dlp fills the stderr pipe buffer with warnings.
+        let stderr_handle = child.stderr.take().map(|stderr| {
+            let app_handle = app_handle.clone();
+            std::thread::spawn(move || {
+                let mut tail: Vec<String> = Vec::new();
+                let reader = std::io::BufReader::new(stderr);
+                for line in reader.lines().map_while(Result::ok) {
+                    let trimmed = line.trim();
+                    let _ = app_handle.emit("download-log", trimmed.to_string());
+                    if !trimmed.is_empty() {
+                        tail.push(trimmed.to_string());
+                        if tail.len() > 8 {
+                            tail.remove(0);
+                        }
+                    }
+                }
+                tail
+            })
+        });
 
         if let Some(stdout) = child.stdout.take() {
             let reader = std::io::BufReader::new(stdout);
             let mut current_title = track_title.clone();
             let mut _final_path = String::new();
 
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    let trimmed = line.trim();
+            for line in reader.lines().map_while(Result::ok) {
+                let trimmed = line.trim();
 
-                    // Parse download destination
-                    if trimmed.starts_with("[download] Destination:") {
-                        _final_path = trimmed
-                            .replace("[download] Destination:", "")
-                            .trim()
-                            .to_string();
-                        if let Some(name) = std::path::Path::new(&_final_path).file_stem() {
-                            current_title = name.to_string_lossy().to_string();
-                        }
-                        if !downloaded_paths.contains(&_final_path) {
-                            downloaded_paths.push(_final_path.clone());
-                        }
-                    } else if trimmed.starts_with("[ExtractAudio] Destination:") {
-                        _final_path = trimmed
-                            .replace("[ExtractAudio] Destination:", "")
-                            .trim()
-                            .to_string();
-                        if !downloaded_paths.contains(&_final_path) {
-                            downloaded_paths.push(_final_path.clone());
-                        }
-                    } else if trimmed.starts_with("[Merger] Merging formats into \"") {
-                        let path = trimmed.replace("[Merger] Merging formats into \"", "");
-                        let path = path.trim_end_matches('"').to_string();
-                        if !downloaded_paths.contains(&path) {
-                            downloaded_paths.push(path);
-                        }
+                // Parse download destination
+                if trimmed.starts_with("[download] Destination:") {
+                    _final_path = trimmed
+                        .replace("[download] Destination:", "")
+                        .trim()
+                        .to_string();
+                    if let Some(name) = std::path::Path::new(&_final_path).file_stem() {
+                        current_title = name.to_string_lossy().to_string();
                     }
+                    if !downloaded_paths.contains(&_final_path) {
+                        downloaded_paths.push(_final_path.clone());
+                    }
+                } else if trimmed.starts_with("[ExtractAudio] Destination:") {
+                    _final_path = trimmed
+                        .replace("[ExtractAudio] Destination:", "")
+                        .trim()
+                        .to_string();
+                    if !downloaded_paths.contains(&_final_path) {
+                        downloaded_paths.push(_final_path.clone());
+                    }
+                } else if trimmed.starts_with("[Merger] Merging formats into \"") {
+                    let path = trimmed.replace("[Merger] Merging formats into \"", "");
+                    let path = path.trim_end_matches('"').to_string();
+                    if !downloaded_paths.contains(&path) {
+                        downloaded_paths.push(path);
+                    }
+                }
 
-                    // Also check for existing file
-                    if trimmed.contains("has already been downloaded") {
-                        // Extract path between [download] and has already...
-                        if let Some(start) = trimmed.find(" ") {
-                            if let Some(end) = trimmed.find(" has already") {
-                                _final_path = trimmed[start..end].trim().to_string();
-                                if !downloaded_paths.contains(&_final_path) {
-                                    downloaded_paths.push(_final_path.clone());
-                                }
+                // Also check for existing file
+                if trimmed.contains("has already been downloaded") {
+                    // Extract path between [download] and has already...
+                    if let (Some(start), Some(end)) = (trimmed.find(' '), trimmed.find(" has already")) {
+                        if start < end {
+                            _final_path = trimmed[start..end].trim().to_string();
+                            if !downloaded_paths.contains(&_final_path) {
+                                downloaded_paths.push(_final_path.clone());
                             }
                         }
-                        already_downloaded = true;
-                        // Emit 100% progress immediately for existing files
+                    }
+                    already_downloaded = true;
+                    // Emit 100% progress immediately for existing files
+                    let progress = DownloadProgress {
+                        status: "downloading".to_string(),
+                        percent: 100.0,
+                        speed: "Skipped (Exists)".to_string(),
+                        eta: "0s".to_string(),
+                        title: current_title.clone(),
+                        current: track_index,
+                        total: total_tracks,
+                        filename: current_title.clone(),
+                    };
+                    let _ = app_handle.emit("download-progress", progress);
+                }
+
+                // Parse progress from default yt-dlp output (use token directly before `%` to avoid corrupting percent with fragment counts)
+                if trimmed.starts_with("[download]") && trimmed.contains('%') {
+                    if let Some(percent_idx) = trimmed.find('%') {
+                        let prefix = &trimmed[..percent_idx];
+                        let percent: f64 = prefix
+                            .split_whitespace()
+                            .last()
+                            .map(|tok| tok.trim_matches(|c: char| !c.is_ascii_digit() && c != '.'))
+                            .and_then(|s| s.parse::<f64>().ok())
+                            .unwrap_or(0.0)
+                            .clamp(0.0, 100.0);
+
+                        // Extract speed and ETA
+                        let mut speed = String::new();
+                        let mut eta = String::new();
+
+                        if let Some(at_idx) = trimmed.find(" at ") {
+                            if let Some(eta_idx) = trimmed.find(" ETA ") {
+                                if at_idx + 4 < eta_idx {
+                                    speed = trimmed[at_idx + 4..eta_idx].trim().to_string();
+                                    eta = trimmed[eta_idx + 5..].trim().to_string();
+                                }
+                            } else {
+                                speed = trimmed[at_idx + 4..].trim().to_string();
+                            }
+                        }
+
                         let progress = DownloadProgress {
                             status: "downloading".to_string(),
-                            percent: 100.0,
-                            speed: "Skipped (Exists)".to_string(),
-                            eta: "0s".to_string(),
+                            percent,
+                            speed,
+                            eta,
                             title: current_title.clone(),
                             current: track_index,
                             total: total_tracks,
                             filename: current_title.clone(),
                         };
-                        let _ = app_handle.emit("download-progress", progress);
-                    }
 
-                    // Parse progress from default yt-dlp output
-                    if trimmed.starts_with("[download]") && trimmed.contains('%') {
-                        if let Some(percent_idx) = trimmed.find('%') {
-                            let prefix = &trimmed[..percent_idx];
-                            // Extract just the numbers before the %
-                            let percent_str: String = prefix
-                                .chars()
-                                .filter(|c| c.is_ascii_digit() || *c == '.')
-                                .collect();
-                            let percent: f64 = percent_str.parse().unwrap_or(0.0);
-
-                            // Extract speed and ETA
-                            let mut speed = String::new();
-                            let mut eta = String::new();
-
-                            if let Some(at_idx) = trimmed.find(" at ") {
-                                if let Some(eta_idx) = trimmed.find(" ETA ") {
-                                    if at_idx + 4 < eta_idx {
-                                        speed = trimmed[at_idx + 4..eta_idx].trim().to_string();
-                                        eta = trimmed[eta_idx + 5..].trim().to_string();
-                                    }
-                                } else {
-                                    speed = trimmed[at_idx + 4..].trim().to_string();
-                                }
-                            }
-
-                            let progress = DownloadProgress {
-                                status: "downloading".to_string(),
-                                percent,
-                                speed,
-                                eta,
-                                title: current_title.clone(),
-                                current: track_index,
-                                total: total_tracks,
-                                filename: current_title.clone(),
-                            };
-
-                            let _ = app_handle.emit("download-progress", progress.clone());
-                            {
-                                let state = app_handle.state::<AppState>();
-                                *state.current_progress.lock().unwrap() = Some(progress);
-                            }
-                        }
-                    }
-
-                    // Track converting
-                    if (trimmed.starts_with("[ExtractAudio]")
-                        || trimmed.starts_with("[Merger]")
-                        || trimmed.starts_with("[VideoConvertor]")
-                        || trimmed.starts_with("[Fixup"))
-                        && !trimmed.contains("Not converting")
-                    {
-                        let progress = DownloadProgress {
-                            status: "converting".to_string(),
-                            percent: 100.0,
-                            speed: String::new(),
-                            eta: String::new(),
-                            title: current_title.clone(),
-                            current: track_index,
-                            total: total_tracks,
-                            filename: current_title.clone(),
-                        };
                         let _ = app_handle.emit("download-progress", progress.clone());
                         {
                             let state = app_handle.state::<AppState>();
-                            *state.current_progress.lock().unwrap() = Some(progress);
+                            *lock_unpoisoned(&state.current_progress) = Some(progress);
                         }
-                    }
-
-                    // Emit log line (skip frequent progress updates to prevent lag/memory issues)
-                    if !(trimmed.starts_with("[download]") && trimmed.contains('%')) {
-                        let _ = app_handle.emit("download-log", trimmed.to_string());
                     }
                 }
-            }
-        }
 
-        // Check stderr for errors
-        if let Some(stderr) = child.stderr.take() {
-            let reader = std::io::BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    let trimmed = line.trim();
-                    let _ = app_handle.emit("download-log", trimmed.to_string());
-                    if !trimmed.is_empty() {
-                        stderr_tail.push(trimmed.to_string());
-                        if stderr_tail.len() > 8 {
-                            stderr_tail.remove(0);
-                        }
+                // Track converting
+                if (trimmed.starts_with("[ExtractAudio]")
+                    || trimmed.starts_with("[Merger]")
+                    || trimmed.starts_with("[VideoConvertor]")
+                    || trimmed.starts_with("[Fixup"))
+                    && !trimmed.contains("Not converting")
+                {
+                    let progress = DownloadProgress {
+                        status: "converting".to_string(),
+                        percent: 100.0,
+                        speed: String::new(),
+                        eta: String::new(),
+                        title: current_title.clone(),
+                        current: track_index,
+                        total: total_tracks,
+                        filename: current_title.clone(),
+                    };
+                    let _ = app_handle.emit("download-progress", progress.clone());
+                    {
+                        let state = app_handle.state::<AppState>();
+                        *lock_unpoisoned(&state.current_progress) = Some(progress);
                     }
+                }
+
+                // Emit log line (skip frequent progress updates to prevent lag/memory issues)
+                if !(trimmed.starts_with("[download]") && trimmed.contains('%')) {
+                    let _ = app_handle.emit("download-log", trimmed.to_string());
                 }
             }
         }
 
         let status = child.wait();
-        {
-            let mut pids = active_download_pids.lock().unwrap();
+        let stderr_tail: Vec<String> = stderr_handle
+            .and_then(|h| h.join().ok())
+            .unwrap_or_default();
+        let no_active_downloads_left = {
+            let mut pids = lock_unpoisoned(&active_download_pids);
             pids.retain(|pid| *pid != child_id);
-        }
+            pids.is_empty()
+        };
 
         let is_aborted = {
             let state_val = app_handle.state::<AppState>();
-            let abort = *state_val.abort_flag.lock().unwrap();
+            let abort = *lock_unpoisoned(&state_val.abort_flag);
             abort
         };
 
@@ -818,8 +925,16 @@ pub async fn download_track(
                 let _ = std::fs::remove_file(format!("{}.ytdl", path));
             }
         }
+        if no_active_downloads_left {
+            let state_val = app_handle.state::<AppState>();
+            *lock_unpoisoned(&state_val.current_progress) = None;
+        }
         match status {
-            Ok(s) if s.success() => Ok("Success".to_string()),
+            // Rückgabe = finaler Pfad (falls bekannt) statt nur "Success"
+            Ok(s) if s.success() => Ok(downloaded_paths
+                .last()
+                .cloned()
+                .unwrap_or_else(|| "Success".to_string())),
             Ok(s) => {
                 let detail = if stderr_tail.is_empty() {
                     String::new()
@@ -838,71 +953,168 @@ pub async fn download_track(
     .await
     .map_err(|e| e.to_string())?;
 
-    {
-        let state_val = app.state::<AppState>();
-        *state_val.current_progress.lock().unwrap() = None;
-    }
-
     result
 }
 
 #[tauri::command]
 pub async fn cancel_download(state: State<'_, AppState>) -> Result<(), String> {
-    let mut abort = state.abort_flag.lock().unwrap();
-    *abort = true;
-    let mut paused = state.pause_flag.lock().unwrap();
-    *paused = false;
-    let mut downloading = state.is_downloading.lock().unwrap();
-    *downloading = false;
+    *lock_unpoisoned(&state.abort_flag) = true;
+    *lock_unpoisoned(&state.pause_flag) = false;
+    *lock_unpoisoned(&state.is_downloading) = false;
+    *lock_unpoisoned(&state.current_progress) = None;
 
     let pids = {
-        let mut active = state.active_download_pids.lock().unwrap();
+        let mut active = lock_unpoisoned(&state.active_download_pids);
         let pids = active.clone();
         active.clear();
         pids
     };
 
-    for pid in pids {
-        kill_process_tree(pid);
-    }
+    tokio::task::spawn_blocking(move || {
+        for pid in pids {
+            kill_process_tree(pid);
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+mod win_process {
+    use std::collections::VecDeque;
+    use std::ffi::c_void;
+
+    const TH32CS_SNAPPROCESS: u32 = 0x0000_0002;
+    const PROCESS_SUSPEND_RESUME: u32 = 0x0800;
+    const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
+
+    #[repr(C)]
+    struct ProcessEntry32W {
+        dw_size: u32,
+        cnt_usage: u32,
+        th32_process_id: u32,
+        th32_default_heap_id: usize,
+        th32_module_id: u32,
+        cnt_threads: u32,
+        th32_parent_process_id: u32,
+        pc_pri_class_base: i32,
+        dw_flags: u32,
+        sz_exe_file: [u16; 260],
+    }
+
+    type NtProcessFn = unsafe extern "system" fn(*mut c_void) -> i32;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateToolhelp32Snapshot(dw_flags: u32, th32_process_id: u32) -> *mut c_void;
+        fn Process32FirstW(h_snapshot: *mut c_void, lppe: *mut ProcessEntry32W) -> i32;
+        fn Process32NextW(h_snapshot: *mut c_void, lppe: *mut ProcessEntry32W) -> i32;
+        fn OpenProcess(
+            dw_desired_access: u32,
+            b_inherit_handle: i32,
+            dw_process_id: u32,
+        ) -> *mut c_void;
+        fn CloseHandle(h_object: *mut c_void) -> i32;
+        fn GetModuleHandleA(lp_module_name: *const u8) -> *mut c_void;
+        fn GetProcAddress(h_module: *mut c_void, lp_proc_name: *const u8) -> *const c_void;
+    }
+
+    fn collect_process_tree(root_pid: u32) -> Vec<u32> {
+        let mut pairs: Vec<(u32, u32)> = Vec::new();
+        unsafe {
+            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if !snap.is_null() && snap != INVALID_HANDLE_VALUE {
+                let mut entry: ProcessEntry32W = std::mem::zeroed();
+                entry.dw_size = std::mem::size_of::<ProcessEntry32W>() as u32;
+                if Process32FirstW(snap, &mut entry) != 0 {
+                    loop {
+                        pairs.push((entry.th32_process_id, entry.th32_parent_process_id));
+                        if Process32NextW(snap, &mut entry) == 0 {
+                            break;
+                        }
+                    }
+                }
+                CloseHandle(snap);
+            }
+        }
+
+        let mut result = Vec::new();
+        let mut queue = VecDeque::new();
+        queue.push_back(root_pid);
+        while let Some(pid) = queue.pop_front() {
+            if !result.contains(&pid) {
+                result.push(pid);
+                for &(child, parent) in &pairs {
+                    if parent == pid && !result.contains(&child) {
+                        queue.push_back(child);
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    pub fn set_process_tree_paused(root_pid: u32, paused: bool) -> Result<(), String> {
+        unsafe {
+            let ntdll = GetModuleHandleA(c"ntdll.dll".as_ptr().cast::<u8>());
+            if ntdll.is_null() {
+                return Err("ntdll.dll could not be located".to_string());
+            }
+            let proc_name = if paused {
+                c"NtSuspendProcess"
+            } else {
+                c"NtResumeProcess"
+            };
+            let func_ptr = GetProcAddress(ntdll, proc_name.as_ptr().cast::<u8>());
+            if func_ptr.is_null() {
+                return Err("NtSuspendProcess/NtResumeProcess not available".to_string());
+            }
+            let nt_fn: NtProcessFn = std::mem::transmute(func_ptr);
+
+            let pids = collect_process_tree(root_pid);
+            let mut root_error: Option<String> = None;
+
+            for pid in pids {
+                let handle = OpenProcess(PROCESS_SUSPEND_RESUME, 0, pid);
+                if handle.is_null() {
+                    if pid == root_pid {
+                        root_error = Some(format!("Could not open process PID {}", pid));
+                    }
+                    continue;
+                }
+                let status = nt_fn(handle);
+                CloseHandle(handle);
+                if status != 0 && pid == root_pid {
+                    root_error = Some(format!(
+                        "Failed to {} PID {} (NTSTATUS 0x{:08x})",
+                        if paused { "suspend" } else { "resume" },
+                        pid,
+                        status as u32
+                    ));
+                }
+            }
+
+            if let Some(err) = root_error {
+                Err(err)
+            } else {
+                Ok(())
+            }
+        }
+    }
 }
 
 fn set_download_process_paused(pid: u32, paused: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        let command = if paused { "Suspend-Process" } else { "Resume-Process" };
-        let script = format!(
-            r#"
-function Set-ProcessTreeState([int]$Id) {{
-  Get-CimInstance Win32_Process -Filter "ParentProcessId=$Id" | ForEach-Object {{
-    Set-ProcessTreeState ([int]$_.ProcessId)
-  }}
-  {command} -Id $Id -ErrorAction Stop
-}}
-Set-ProcessTreeState {pid}
-"#
-        );
-        let mut cmd = Command::new("powershell");
-        cmd.args(["-NoProfile", "-Command", &script])
-            .creation_flags(0x08000000);
-        let output = cmd
-            .output()
-            .map_err(|e| format!("PowerShell konnte nicht gestartet werden: {}", e))?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(command_output_text(&output))
-        }
+        win_process::set_process_tree_paused(pid, paused)
     }
 
     #[cfg(not(target_os = "windows"))]
     {
         let signal = if paused { "-STOP" } else { "-CONT" };
-        let script = format!(
-            "pkill {signal} -P {pid} 2>/dev/null || true; kill {signal} {pid}"
-        );
+        let script = format!("pkill {signal} -P {pid} 2>/dev/null || true; kill {signal} {pid}");
         let output = Command::new("sh")
             .args(["-c", &script])
             .output()
@@ -918,27 +1130,31 @@ Set-ProcessTreeState {pid}
 #[tauri::command]
 pub async fn pause_download(state: State<'_, AppState>) -> Result<(), String> {
     {
-        let downloading = state.is_downloading.lock().unwrap();
+        let downloading = lock_unpoisoned(&state.is_downloading);
         if !*downloading {
             return Err("No active download to pause.".to_string());
         }
     }
 
-    let pids = state.active_download_pids.lock().unwrap().clone();
+    let pids = lock_unpoisoned(&state.active_download_pids).clone();
     if pids.is_empty() {
         return Err("No active download process to pause.".to_string());
     }
 
-    let mut errors = Vec::new();
-    for pid in pids {
-        if let Err(e) = set_download_process_paused(pid, true) {
-            errors.push(format!("PID {pid}: {e}"));
+    let errors = tokio::task::spawn_blocking(move || {
+        let mut errs = Vec::new();
+        for pid in pids {
+            if let Err(e) = set_download_process_paused(pid, true) {
+                errs.push(format!("PID {pid}: {e}"));
+            }
         }
-    }
+        errs
+    })
+    .await
+    .map_err(|e| e.to_string())?;
 
     if errors.is_empty() {
-        let mut paused = state.pause_flag.lock().unwrap();
-        *paused = true;
+        *lock_unpoisoned(&state.pause_flag) = true;
         Ok(())
     } else {
         Err(errors.join("\n"))
@@ -947,21 +1163,25 @@ pub async fn pause_download(state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn resume_download(state: State<'_, AppState>) -> Result<(), String> {
-    let pids = state.active_download_pids.lock().unwrap().clone();
+    let pids = lock_unpoisoned(&state.active_download_pids).clone();
     if pids.is_empty() {
         return Err("No paused download process to resume.".to_string());
     }
 
-    let mut errors = Vec::new();
-    for pid in pids {
-        if let Err(e) = set_download_process_paused(pid, false) {
-            errors.push(format!("PID {pid}: {e}"));
+    let errors = tokio::task::spawn_blocking(move || {
+        let mut errs = Vec::new();
+        for pid in pids {
+            if let Err(e) = set_download_process_paused(pid, false) {
+                errs.push(format!("PID {pid}: {e}"));
+            }
         }
-    }
+        errs
+    })
+    .await
+    .map_err(|e| e.to_string())?;
 
     if errors.is_empty() {
-        let mut paused = state.pause_flag.lock().unwrap();
-        *paused = false;
+        *lock_unpoisoned(&state.pause_flag) = false;
         Ok(())
     } else {
         Err(errors.join("\n"))
@@ -969,9 +1189,13 @@ pub async fn resume_download(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn convert_file(app: AppHandle, state: State<'_, AppState>, request: ConvertRequest) -> Result<String, String> {
+pub async fn convert_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: ConvertRequest,
+) -> Result<String, String> {
     let input = request.input_path.clone();
-    let output_format = request.output_format.clone();
+    let output_format = request.output_format.trim().to_ascii_lowercase();
     let quality = request.quality.clone();
 
     let input_path = std::path::Path::new(&input);
@@ -985,207 +1209,253 @@ pub async fn convert_file(app: AppHandle, state: State<'_, AppState>, request: C
         .unwrap_or_else(|| "output".to_string());
     let parent = input_path
         .parent()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| ".".to_string());
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
 
     let input_ext = input_path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("");
-    let output_path = if input_ext.eq_ignore_ascii_case(&output_format) {
-        format!("{}/{}_converted.{}", parent, stem, output_format)
+    let output_filename = if input_ext.eq_ignore_ascii_case(&output_format) {
+        format!("{}_converted.{}", stem, output_format)
     } else {
-        format!("{}/{}.{}", parent, stem, output_format)
+        format!("{}.{}", stem, output_format)
     };
+    let output_path = parent.join(output_filename).to_string_lossy().to_string();
 
-    let mut args: Vec<String> = vec![
-        "-hwaccel".to_string(),
-        "auto".to_string(),
+    let is_video = is_video_format(&output_format);
+    let is_lossless = is_lossless_audio_format(&output_format);
+    let gpu_encoder = { lock_unpoisoned(&state.config).gpu_encoder.clone() };
+
+    let mut args: Vec<String> = Vec::new();
+    if is_video && gpu_encoder != "off" {
+        args.extend(["-hwaccel".to_string(), "auto".to_string()]);
+    }
+    args.extend([
         "-i".to_string(),
         input.clone(),
         "-threads".to_string(),
         "0".to_string(),
         "-y".to_string(),
-    ];
+    ]);
 
-    let gpu_encoder = { state.config.lock().unwrap().gpu_encoder.clone() };
-    if gpu_encoder != "auto" && gpu_encoder != "off" {
+    if !is_video {
+        // Reines Audio-Ausgabeformat: keine Video-Spur neu encodieren (verhindert GPU-Encoder-Fehler!)
+        args.push("-vn".to_string());
+    } else if gpu_encoder != "auto" && gpu_encoder != "off" {
         match gpu_encoder.as_str() {
-            "nvenc_h264" => args.extend(["-c:v".to_string(), "h264_nvenc".to_string(), "-cq".to_string(), "23".to_string()]),
-            "nvenc_hevc" => args.extend(["-c:v".to_string(), "hevc_nvenc".to_string(), "-cq".to_string(), "23".to_string()]),
-            "qsv_h264" => args.extend(["-c:v".to_string(), "h264_qsv".to_string(), "-global_quality".to_string(), "25".to_string()]),
-            "qsv_hevc" => args.extend(["-c:v".to_string(), "hevc_qsv".to_string(), "-global_quality".to_string(), "25".to_string()]),
-            "amf_h264" => args.extend(["-c:v".to_string(), "h264_amf".to_string(), "-quality".to_string(), "balanced".to_string()]),
-            "amf_hevc" => args.extend(["-c:v".to_string(), "hevc_amf".to_string(), "-quality".to_string(), "balanced".to_string()]),
-            "videotoolbox_h264" => args.extend(["-c:v".to_string(), "h264_videotoolbox".to_string(), "-q:v".to_string(), "65".to_string()]),
-            "videotoolbox_hevc" => args.extend(["-c:v".to_string(), "hevc_videotoolbox".to_string(), "-q:v".to_string(), "65".to_string()]),
+            "nvenc_h264" => args.extend([
+                "-c:v".to_string(),
+                "h264_nvenc".to_string(),
+                "-cq".to_string(),
+                "23".to_string(),
+            ]),
+            "nvenc_hevc" => args.extend([
+                "-c:v".to_string(),
+                "hevc_nvenc".to_string(),
+                "-cq".to_string(),
+                "23".to_string(),
+            ]),
+            "qsv_h264" => args.extend([
+                "-c:v".to_string(),
+                "h264_qsv".to_string(),
+                "-global_quality".to_string(),
+                "25".to_string(),
+            ]),
+            "qsv_hevc" => args.extend([
+                "-c:v".to_string(),
+                "hevc_qsv".to_string(),
+                "-global_quality".to_string(),
+                "25".to_string(),
+            ]),
+            "amf_h264" => args.extend([
+                "-c:v".to_string(),
+                "h264_amf".to_string(),
+                "-quality".to_string(),
+                "balanced".to_string(),
+            ]),
+            "amf_hevc" => args.extend([
+                "-c:v".to_string(),
+                "hevc_amf".to_string(),
+                "-quality".to_string(),
+                "balanced".to_string(),
+            ]),
+            "videotoolbox_h264" => args.extend([
+                "-c:v".to_string(),
+                "h264_videotoolbox".to_string(),
+                "-q:v".to_string(),
+                "65".to_string(),
+            ]),
+            "videotoolbox_hevc" => args.extend([
+                "-c:v".to_string(),
+                "hevc_videotoolbox".to_string(),
+                "-q:v".to_string(),
+                "65".to_string(),
+            ]),
             _ => {}
         }
     }
 
-    // Quality mapping
-    match quality.as_str() {
-        "low" => {
-            args.extend(["-b:a".to_string(), "96k".to_string()]);
+    // Quality mapping (Audio-Bitrate nur bei verlustbehafteten Formaten, Video-Bitrate nur bei Video)
+    if !is_lossless {
+        match quality.as_str() {
+            "low" => args.extend(["-b:a".to_string(), "96k".to_string()]),
+            "medium" => args.extend(["-b:a".to_string(), "192k".to_string()]),
+            "high" => args.extend(["-b:a".to_string(), "320k".to_string()]),
+            "max" => {
+                args.extend(["-b:a".to_string(), "320k".to_string()]);
+                if is_video && (gpu_encoder == "auto" || gpu_encoder == "off") {
+                    args.extend(["-b:v".to_string(), "8000k".to_string()]);
+                }
+            }
+            _ => {}
         }
-        "medium" => {
-            args.extend(["-b:a".to_string(), "192k".to_string()]);
-        }
-        "high" => {
-            args.extend(["-b:a".to_string(), "320k".to_string()]);
-        }
-        "max" => {
-            args.extend([
-                "-b:a".to_string(),
-                "500k".to_string(),
-                "-b:v".to_string(),
-                "8000k".to_string(),
-            ]);
-        }
-        _ => {}
     }
 
     args.push(output_path.clone());
 
     let app_handle = app.clone();
+    let active_pids = state.active_download_pids.clone();
 
-    tokio::task::spawn_blocking(move || {
-        use std::io::BufRead;
+    let result = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        use std::io::Read;
         use std::process::Stdio;
 
         #[allow(unused_mut)]
         let mut cmd = Command::new("ffmpeg");
         cmd.args(&args)
-            .stdout(Stdio::piped())
+            .stdout(Stdio::null())
             .stderr(Stdio::piped());
         #[cfg(target_os = "windows")]
         cmd.creation_flags(0x08000000);
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
-                let _ = app_handle.emit("convert-error", format!("FFmpeg not found: {}", e));
-                return;
+                let msg = format!("FFmpeg not found: {}", e);
+                let _ = app_handle.emit("convert-error", msg.clone());
+                return Err(msg);
             }
         };
 
-        // FFmpeg outputs progress to stderr
-        if let Some(stderr) = child.stderr.take() {
-            let reader = std::io::BufReader::new(stderr);
+        let child_id = child.id();
+        {
+            lock_unpoisoned(&active_pids).push(child_id);
+        }
+
+        let mut stderr_tail: Vec<String> = Vec::new();
+
+        // FFmpeg writes progress updates separated by `\r` (not `\n`), so split on both `\r` and `\n`.
+        if let Some(mut stderr) = child.stderr.take() {
+            let mut buf = [0u8; 4096];
+            let mut line_buf: Vec<u8> = Vec::with_capacity(256);
             let mut duration_secs: f64 = 0.0;
 
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    // Parse duration
-                    if line.contains("Duration:") {
-                        if let Some(dur) = parse_ffmpeg_duration(&line) {
-                            duration_secs = dur;
-                        }
-                    }
-
-                    // Parse time progress
-                    if line.contains("time=") {
-                        if let Some(current) = parse_ffmpeg_time(&line) {
-                            let percent = if duration_secs > 0.0 {
-                                (current / duration_secs * 100.0).min(100.0)
-                            } else {
-                                0.0
-                            };
-
-                            let _ = app_handle.emit(
-                                "convert-progress",
-                                ConvertProgress {
-                                    status: "converting".to_string(),
-                                    percent,
-                                    filename: stem.clone(),
-                                },
-                            );
-                        }
-                    }
-
-                    let _ = app_handle.emit("convert-log", line);
+            let mut handle_line = |raw: &str| {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    return;
                 }
+                if trimmed.contains("Duration:") {
+                    if let Some(dur) = parse_ffmpeg_duration(trimmed) {
+                        duration_secs = dur;
+                    }
+                }
+                if trimmed.contains("time=") {
+                    if let Some(current) = parse_ffmpeg_time(trimmed) {
+                        let percent = if duration_secs > 0.0 {
+                            (current / duration_secs * 100.0).clamp(0.0, 100.0)
+                        } else {
+                            0.0
+                        };
+                        let _ = app_handle.emit(
+                            "convert-progress",
+                            ConvertProgress {
+                                status: "converting".to_string(),
+                                percent,
+                                filename: stem.clone(),
+                            },
+                        );
+                    }
+                }
+                if !trimmed.starts_with("frame=") && !trimmed.starts_with("size=") {
+                    stderr_tail.push(trimmed.to_string());
+                    if stderr_tail.len() > 8 {
+                        stderr_tail.remove(0);
+                    }
+                    let _ = app_handle.emit("convert-log", trimmed.to_string());
+                }
+            };
+
+            loop {
+                match stderr.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        for &b in &buf[..n] {
+                            if b == b'\r' || b == b'\n' {
+                                if !line_buf.is_empty() {
+                                    let line = String::from_utf8_lossy(&line_buf).into_owned();
+                                    line_buf.clear();
+                                    handle_line(&line);
+                                }
+                            } else {
+                                line_buf.push(b);
+                            }
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            if !line_buf.is_empty() {
+                let line = String::from_utf8_lossy(&line_buf).into_owned();
+                handle_line(&line);
             }
         }
 
         let status = child.wait();
+        {
+            lock_unpoisoned(&active_pids).retain(|pid| *pid != child_id);
+        }
+
         match status {
             Ok(s) if s.success() => {
-                let _ = app_handle.emit("convert-finished", output_path);
+                let _ = app_handle.emit("convert-finished", output_path.clone());
+                Ok(output_path)
             }
-            _ => {
-                let _ = app_handle.emit("convert-error", "Conversion failed");
+            Ok(s) => {
+                let detail = if stderr_tail.is_empty() {
+                    format!("FFmpeg conversion failed (exit code {:?})", s.code())
+                } else {
+                    format!(
+                        "FFmpeg conversion failed (exit code {:?}):\n{}",
+                        s.code(),
+                        stderr_tail.join("\n")
+                    )
+                };
+                let _ = app_handle.emit("convert-error", detail.clone());
+                Err(detail)
+            }
+            Err(e) => {
+                let msg = format!("FFmpeg wait error: {}", e);
+                let _ = app_handle.emit("convert-error", msg.clone());
+                Err(msg)
             }
         }
     })
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| e.to_string())??;
 
-    Ok("Conversion started".to_string())
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn install_ffmpeg() -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let mut cmd = Command::new("winget");
-        cmd.args([
-            "install",
-            "--id=Gyan.FFmpeg",
-            "-e",
-            "--silent",
-            "--accept-source-agreements",
-            "--accept-package-agreements",
-        ])
-        .creation_flags(0x08000000);
-
-        let output = cmd
-            .output()
-            .map_err(|e| format!("winget not available: {}", e))?;
-
-        let output_text = command_output_text(&output);
-        if output.status.success() || winget_output_means_installed(&output_text) {
-            Ok("FFmpeg ist bereits installiert oder wurde erfolgreich installiert.".to_string())
-        } else {
-            Err(format_winget_error(
-                "FFmpeg",
-                output.status.code(),
-                &output_text,
-            ))
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let command = linux_install_command("ffmpeg")?.join(" ");
-        run_shell_install("FFmpeg", &command)
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let output = Command::new("brew")
-            .args(["install", "ffmpeg"])
-            .output()
-            .map_err(|e| format!("Homebrew not available: {}", e))?;
-
-        if output.status.success() {
-            Ok("FFmpeg installed successfully".to_string())
-        } else {
-            Err(String::from_utf8_lossy(&output.stderr).to_string())
-        }
-    }
-}
-
-#[tauri::command]
-pub async fn install_ytdlp() -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        // Erst Upgrade versuchen (falls schon installiert), dann Install als Fallback.
-        // Reines `install` meldet sonst "already installed" statt zu upgraden.
-        for action in ["upgrade", "install"] {
+    tokio::task::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        {
             let mut cmd = Command::new("winget");
             cmd.args([
-                action,
-                "--id=yt-dlp.yt-dlp",
+                "install",
+                "--id=Gyan.FFmpeg",
                 "-e",
                 "--silent",
                 "--accept-source-agreements",
@@ -1199,100 +1469,172 @@ pub async fn install_ytdlp() -> Result<String, String> {
 
             let output_text = command_output_text(&output);
             if output.status.success() || winget_output_means_installed(&output_text) {
-                return Ok("yt-dlp installed successfully".to_string());
+                Ok("FFmpeg ist bereits installiert oder wurde erfolgreich installiert.".to_string())
+            } else {
+                Err(format_winget_error(
+                    "FFmpeg",
+                    output.status.code(),
+                    &output_text,
+                ))
             }
-            // Bei upgrade: "kein installiertes Paket gefunden" o.ä. → install versuchen
-            if action == "upgrade" {
-                let lower = output_text.to_lowercase();
-                if lower.contains("no installed package found")
-                    || lower.contains("kein installiertes paket")
-                    || lower.contains("not found")
-                    || lower.contains("nicht gefunden")
-                {
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let command = linux_install_command("ffmpeg")?.join(" ");
+            run_shell_install("FFmpeg", &command)
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let output = Command::new("brew")
+                .args(["install", "ffmpeg"])
+                .output()
+                .map_err(|e| format!("Homebrew not available: {}", e))?;
+
+            if output.status.success() {
+                Ok("FFmpeg installed successfully".to_string())
+            } else {
+                Err(String::from_utf8_lossy(&output.stderr).to_string())
+            }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn install_ytdlp() -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        {
+            for action in ["upgrade", "install"] {
+                let mut cmd = Command::new("winget");
+                cmd.args([
+                    action,
+                    "--id=yt-dlp.yt-dlp",
+                    "-e",
+                    "--silent",
+                    "--accept-source-agreements",
+                    "--accept-package-agreements",
+                ])
+                .creation_flags(0x08000000);
+
+                let output = cmd
+                    .output()
+                    .map_err(|e| format!("winget not available: {}", e))?;
+
+                let output_text = command_output_text(&output);
+                if output.status.success() || winget_output_means_installed(&output_text) {
+                    return Ok("yt-dlp installed successfully".to_string());
+                }
+                if action == "upgrade" {
+                    let lower = output_text.to_lowercase();
+                    if lower.contains("no installed package found")
+                        || lower.contains("kein installiertes paket")
+                        || lower.contains("not found")
+                        || lower.contains("nicht gefunden")
+                    {
+                        continue;
+                    }
+                    if lower.contains("no available upgrade")
+                        || lower.contains("kein verfügbares upgrade")
+                        || lower.contains("kein verfugbares upgrade")
+                        || lower.contains("no newer package versions")
+                    {
+                        return Ok("yt-dlp is up to date".to_string());
+                    }
                     continue;
                 }
-                // Anderer Upgrade-Fehler (z.B. kein Upgrade verfügbar) = bereits aktuell
-                if lower.contains("no available upgrade")
-                    || lower.contains("kein verfügbares upgrade")
-                    || lower.contains("kein verfugbares upgrade")
-                    || lower.contains("no newer package versions")
-                {
-                    return Ok("yt-dlp is up to date".to_string());
-                }
-                continue;
+                return Err(format_winget_error(
+                    "yt-dlp",
+                    output.status.code(),
+                    &output_text,
+                ));
             }
-            return Err(format_winget_error(
-                "yt-dlp",
-                output.status.code(),
-                &output_text,
-            ));
+            Err("yt-dlp installation failed: winget upgrade+install both failed.".to_string())
         }
-        return Err("yt-dlp installation failed: winget upgrade+install both failed.".to_string());
-    }
 
-    #[cfg(target_os = "linux")]
-    {
-        let command = if command_exists("pipx") {
-            "pipx install yt-dlp || pipx upgrade yt-dlp".to_string()
-        } else if command_exists("python3") {
-            "python3 -m pip install --user -U yt-dlp".to_string()
-        } else {
-            linux_install_command("yt-dlp")?.join(" ")
-        };
-        run_shell_install("yt-dlp", &command)
-    }
+        #[cfg(target_os = "linux")]
+        {
+            let command = if command_exists("pipx") {
+                "pipx install yt-dlp || pipx upgrade yt-dlp".to_string()
+            } else if command_exists("python3") {
+                "python3 -m pip install --user -U yt-dlp".to_string()
+            } else {
+                linux_install_command("yt-dlp")?.join(" ")
+            };
+            run_shell_install("yt-dlp", &command)
+        }
 
-    #[cfg(target_os = "macos")]
-    {
-        let command = if command_exists("brew") {
-            "brew install yt-dlp || brew upgrade yt-dlp".to_string()
-        } else if command_exists("python3") {
-            "python3 -m pip install --user -U yt-dlp".to_string()
-        } else {
-            return Err("Homebrew or python3 is required to install yt-dlp automatically on macOS.".to_string());
-        };
-        run_shell_install("yt-dlp", &command)
-    }
+        #[cfg(target_os = "macos")]
+        {
+            let command = if command_exists("brew") {
+                "brew install yt-dlp || brew upgrade yt-dlp".to_string()
+            } else if command_exists("python3") {
+                "python3 -m pip install --user -U yt-dlp".to_string()
+            } else {
+                return Err(
+                    "Homebrew or python3 is required to install yt-dlp automatically on macOS."
+                        .to_string(),
+                );
+            };
+            run_shell_install("yt-dlp", &command)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn update_ytdlp() -> Result<String, String> {
-    // 1. Try running `yt-dlp --update`
-    let mut cmd = Command::new("yt-dlp");
-    cmd.arg("--update");
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000);
+    let self_update = tokio::task::spawn_blocking(move || {
+        let mut cmd = Command::new("yt-dlp");
+        cmd.arg("--update");
+        #[cfg(target_os = "windows")]
+        cmd.creation_flags(0x08000000);
 
-    match cmd.output() {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            if output.status.success() {
-                let msg = if stdout.trim().is_empty() {
+        match cmd.output() {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                Some(if stdout.is_empty() {
                     "yt-dlp is up to date".to_string()
                 } else {
-                    stdout.trim().to_string()
-                };
-                return Ok(msg);
-            } else {
-                println!("yt-dlp --update returned status code: {:?}", output.status.code());
-                println!("stdout: {}", stdout);
-                println!("stderr: {}", stderr);
+                    stdout
+                })
             }
+            _ => None,
         }
-        Err(e) => {
-            println!("Failed to run yt-dlp --update: {:?}", e);
-        }
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if let Some(msg) = self_update {
+        return Ok(msg);
     }
 
-    // 2. Fall back to install/upgrade command (winget/pip/brew)
     install_ytdlp().await
 }
 
 #[tauri::command]
 pub async fn install_pot_provider() -> Result<String, String> {
+    tokio::task::spawn_blocking(install_pot_provider_sync)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn install_pot_provider_sync() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
+        fn ps_quote(value: &str) -> String {
+            format!("'{}'", value.replace('\'', "''"))
+        }
+
+        // Capture current user's profile paths BEFORE UAC elevation so an elevated admin token
+        // still installs into the active user's APPDATA / USERPROFILE.
+        let target_appdata = std::env::var("APPDATA").unwrap_or_default();
+        let target_userprofile = std::env::var("USERPROFILE").unwrap_or_default();
+
         let script = r#"
 $ErrorActionPreference = 'Stop'
 $logFile = Join-Path $env:TEMP 'soundsync-pot-provider-install.log'
@@ -1323,7 +1665,9 @@ if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
   throw 'npm wurde nicht gefunden. Bitte Node.js LTS installieren oder App neu starten.'
 }
 
-$pluginDir = Join-Path $env:APPDATA 'yt-dlp-plugins'
+$effectiveAppData = if ($targetAppData) { $targetAppData } else { $env:APPDATA }
+$effectiveUserProfile = if ($targetUserProfile) { $targetUserProfile } else { $env:USERPROFILE }
+$pluginDir = Join-Path $effectiveAppData 'yt-dlp-plugins'
 New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
 $pluginZip = Join-Path $pluginDir 'bgutil-ytdlp-pot-provider.zip'
 $release = Invoke-RestMethod -UseBasicParsing 'https://api.github.com/repos/Brainicism/bgutil-ytdlp-pot-provider/releases/latest'
@@ -1334,7 +1678,7 @@ if (-not $tag) {
 Write-Output "Lade yt-dlp Plugin Release $tag nach $pluginZip ..."
 Invoke-WebRequest -UseBasicParsing 'https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/latest/download/bgutil-ytdlp-pot-provider.zip' -OutFile $pluginZip
 
-$providerDir = Join-Path $env:USERPROFILE 'bgutil-ytdlp-pot-provider'
+$providerDir = Join-Path $effectiveUserProfile 'bgutil-ytdlp-pot-provider'
 $tmpRoot = Join-Path $env:TEMP ('soundsync-bgutil-' + [guid]::NewGuid().ToString())
 $sourceZip = Join-Path $tmpRoot 'source.zip'
 New-Item -ItemType Directory -Force -Path $tmpRoot | Out-Null
@@ -1368,10 +1712,6 @@ Write-Output 'PO-Token-Provider wurde eingerichtet.'
 "SoundSync PO-Token-Provider Setup abgeschlossen: $(Get-Date)" | Add-Content -Path $logFile -Encoding UTF8
 "#;
 
-        fn ps_quote(value: &str) -> String {
-            format!("'{}'", value.replace('\'', "''"))
-        }
-
         let temp_dir = std::env::temp_dir();
         let unique = format!(
             "soundsync-pot-provider-{}",
@@ -1389,6 +1729,8 @@ Write-Output 'PO-Token-Provider wurde eingerichtet.'
             r#"$ErrorActionPreference = 'Stop'
 $resultPath = {result_path}
 $logFile = {log_path}
+$targetAppData = {target_appdata}
+$targetUserProfile = {target_userprofile}
 try {{
 {script}
   'OK' | Set-Content -Path $resultPath -Encoding UTF8
@@ -1402,6 +1744,8 @@ try {{
 "#,
             result_path = ps_quote(&result_path.to_string_lossy()),
             log_path = ps_quote(&log_path.to_string_lossy()),
+            target_appdata = ps_quote(&target_appdata),
+            target_userprofile = ps_quote(&target_userprofile),
             script = script
         );
 
@@ -1556,6 +1900,10 @@ echo "PO-Token-Provider setup completed."
 
 #[tauri::command]
 pub fn open_folder(path: String) -> Result<(), String> {
+    let dir_path = std::path::Path::new(&path);
+    if !dir_path.exists() || !dir_path.is_dir() {
+        return Err(format!("Ordner existiert nicht: {}", path));
+    }
     #[cfg(target_os = "windows")]
     {
         Command::new("explorer")
@@ -1566,7 +1914,6 @@ pub fn open_folder(path: String) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     {
-
         Command::new("open")
             .arg(&path)
             .spawn()
@@ -1584,18 +1931,29 @@ pub fn open_folder(path: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn download_and_install_update(
-    app: AppHandle,
+    #[allow(unused_variables)] app: AppHandle,
     download_url: String,
     filename: String,
 ) -> Result<String, String> {
     use std::io::{Read, Write};
 
+    if !crate::server::is_safe_filename(&filename) {
+        return Err("Invalid update filename".to_string());
+    }
+    let allowed_url = download_url.starts_with("https://github.com/Malionaro/Youtube-Soundcload/")
+        || download_url.starts_with("https://objects.githubusercontent.com/")
+        || download_url.starts_with("https://release-assets.githubusercontent.com/");
+    if !allowed_url {
+        return Err("Untrusted update download URL".to_string());
+    }
+
     let temp_dir = std::env::temp_dir();
     let file_path = temp_dir.join(&filename);
 
-    // Download the installer
-    let client = std::thread::spawn(move || -> Result<PathBuf, String> {
+    // Download the installer without blocking Tokio worker thread
+    let client = tokio::task::spawn_blocking(move || -> Result<PathBuf, String> {
         let resp = ureq::get(&download_url)
+            .timeout(std::time::Duration::from_secs(120))
             .call()
             .map_err(|e: ureq::Error| format!("Download failed: {}", e))?;
 
@@ -1617,14 +1975,14 @@ pub async fn download_and_install_update(
 
         Ok(file_path)
     })
-    .join()
-    .map_err(|_| "Thread panicked".to_string())??;
+    .await
+    .map_err(|e| format!("Download task failed: {}", e))??;
 
     // Launch the installer
     #[cfg(target_os = "windows")]
     {
         let path_str = client.to_string_lossy().to_string();
-        if path_str.ends_with(".msi") {
+        if path_str.to_ascii_lowercase().ends_with(".msi") {
             Command::new("msiexec")
                 .args(["/i", &path_str, "/passive"])
                 .creation_flags(0x08000000)
@@ -1643,7 +2001,7 @@ pub async fn download_and_install_update(
             handle.exit(0);
         });
 
-        return Ok("Installer started".to_string());
+        Ok("Installer started".to_string())
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -1660,10 +2018,10 @@ pub async fn download_and_install_update(
                     .unwrap_or(path_str.clone()),
             )
             .spawn();
-        return Ok(format!(
+        Ok(format!(
             "Update heruntergeladen ({}). Bitte manuell installieren – die App wurde NICHT beendet.",
             path_str
-        ));
+        ))
     }
 }
 
@@ -1754,4 +2112,44 @@ pub fn update_tray_status(app: AppHandle, status: String) -> Result<(), String> 
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn playlist_entry_url_reconstructs_youtube_flat_id() {
+        let flat = json!({ "id": "dQw4w9WgXcQ", "ie_key": "Youtube" });
+        assert_eq!(
+            playlist_entry_url(&flat),
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        );
+
+        let full = json!({ "webpage_url": "https://soundcloud.com/artist/track" });
+        assert_eq!(
+            playlist_entry_url(&full),
+            "https://soundcloud.com/artist/track"
+        );
+    }
+
+    #[test]
+    fn playlist_entry_title_falls_back_cleanly() {
+        let with_title = json!({ "title": "  My Song  " });
+        assert_eq!(playlist_entry_title(&with_title, 0), "My Song");
+
+        let from_slug = json!({ "webpage_url": "https://soundcloud.com/a/cool_track-name/" });
+        assert_eq!(playlist_entry_title(&from_slug, 2), "cool track name");
+
+        let empty = json!({});
+        assert_eq!(playlist_entry_title(&empty, 4), "Track 5");
+    }
+
+    #[test]
+    fn sanitize_discord_text_truncates_and_falls_back() {
+        assert_eq!(sanitize_discord_text("   ", "Fallback"), "Fallback");
+        let long = "ä".repeat(200);
+        assert_eq!(sanitize_discord_text(&long, "Fallback").chars().count(), 128);
+    }
 }

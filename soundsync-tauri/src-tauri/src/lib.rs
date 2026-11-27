@@ -4,9 +4,10 @@ pub mod applemusic;
 pub mod server;
 pub mod utils;
 pub mod commands;
+pub mod team;
 
-use models::AppState;
-use server::{ss_start_remote_server, ss_get_local_ip, ss_get_remote_token};
+use models::{lock_unpoisoned, AppState};
+use server::{ss_get_local_ip, ss_get_remote_token, ss_start_remote_server};
 use commands::*;
 
 use tauri::{
@@ -27,6 +28,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
             }
@@ -55,6 +57,7 @@ pub fn run() {
                     "status" => {}
                     "show_ui" => {
                         if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.unminimize();
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
@@ -62,7 +65,7 @@ pub fn run() {
                     "open_folder" => {
                         let folder_path = {
                             let state = app.state::<AppState>();
-                            let config = state.config.lock().unwrap();
+                            let config = lock_unpoisoned(&state.config);
                             config.download_folder.clone()
                         };
                         if !folder_path.is_empty() {
@@ -76,6 +79,25 @@ pub fn run() {
                         let _ = app.emit("tray-cancel-download", ());
                     }
                     "quit" => {
+                        // Laufende Downloads/Konvertierungen sauber beenden (keine Zombie-Prozesse)
+                        {
+                            use discord_rich_presence::DiscordIpc;
+                            let state = app.state::<AppState>();
+                            *lock_unpoisoned(&state.abort_flag) = true;
+                            let pids = {
+                                let mut active = lock_unpoisoned(&state.active_download_pids);
+                                let copy = active.clone();
+                                active.clear();
+                                copy
+                            };
+                            for pid in pids {
+                                utils::kill_process_tree(pid);
+                            }
+                            let maybe_discord = lock_unpoisoned(&state.discord_client).take();
+                            if let Some(mut discord) = maybe_discord {
+                                let _ = discord.client.close();
+                            }
+                        }
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.destroy();
                         }
@@ -97,6 +119,7 @@ pub fn run() {
                                     if let Some(window) =
                                         tray.app_handle().get_webview_window("main")
                                     {
+                                        let _ = window.unminimize();
                                         let _ = window.show();
                                         let _ = window.set_focus();
                                     }
@@ -112,15 +135,15 @@ pub fn run() {
                 .build(app)?;
 
             let _ = ss_start_remote_server(app.handle().clone());
+            team::spawn_watchdog(app.handle().clone());
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // ✅ Kein async mehr → verhindert Chromium Fehler
                 api.prevent_close();
                 let _ = window.hide();
             }
-            _ => {}
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -134,6 +157,7 @@ pub fn run() {
             update_remote_queue,
             read_clipboard_text,
             reset_download_cancel,
+            finish_download,
             check_system,
             get_playlist_info,
             download_track,
@@ -156,7 +180,15 @@ pub fn run() {
             get_trending_videos,
             import_playlist_tracks,
             execute_after_download_action,
-            update_tray_status
+            update_tray_status,
+            team::team_create,
+            team::team_join, team::team_connect_relay, team::team_default_relay,
+            team::team_leave,
+            team::team_add_playlist,
+            team::team_start,
+            team::team_stop,
+            team::team_status,
+            team::team_pull_missing
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

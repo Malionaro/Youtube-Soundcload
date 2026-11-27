@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SoundSync Remote</title>
+    <link rel="icon" type="image/png" href="/logo.png">
     <!-- PWA meta tags -->
     <meta name="theme-color" content="#0a0a0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,8 +13,8 @@
     <!-- Premium Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Lucide Icons -->
-    <script src="https://cdn.jsdelivr.net/npm/lucide/dist/umd/lucide.min.js"></script>
+    <!-- Lucide Icons (pinned version, optional offline fallback) -->
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 
     <style>
         :root {
@@ -90,22 +91,23 @@
         }
 
         header .logo-wrapper {
-            width: 52px;
-            height: 52px;
-            background: var(--primary-gradient);
+            width: 56px;
+            height: 56px;
+            background: transparent;
             border-radius: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
             margin: 0 auto 12px auto;
+            overflow: hidden;
             box-shadow: 0 8px 24px var(--primary-glow);
         }
 
-        header .logo-wrapper i,
-        header .logo-wrapper svg {
-            color: white;
-            width: 24px;
-            height: 24px;
+        header .logo-wrapper img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
         }
 
         h1 {
@@ -896,7 +898,7 @@
     <div class="container">
         <header>
             <div class="logo-wrapper">
-                <i data-lucide="radio"></i>
+                <img src="/logo.png" alt="SoundSync Logo" />
             </div>
             <h1 data-i18n="app_title">SoundSync Remote</h1>
             <p data-i18n="app_subtitle">Sende Links und verwalte Downloads</p>
@@ -999,7 +1001,7 @@
 
                 <div class="player-controls-row">
                     <div class="player-volume">
-                        <i data-lucide="volume-2" id="volume-icon"></i>
+                        <span id="volume-icon-wrap" style="display:inline-flex;align-items:center;"><i data-lucide="volume-2"></i></span>
                         <input type="range" id="player-volume-slider" min="0" max="1" value="0.8" step="0.05" oninput="setAudioVolume(this.value)">
                     </div>
 
@@ -1073,11 +1075,25 @@
             return fetch(authUrl(path), opts);
         }
 
-        // Init Lucide Icons
-        lucide.createIcons();
+        // Safe Lucide icon renderer (does not crash when offline on LAN)
+        function refreshIcons() {
+            if (window.lucide && typeof window.lucide.createIcons === "function") {
+                try { window.lucide.createIcons(); } catch {}
+            }
+        }
+        refreshIcons();
 
         const urlInput = document.getElementById("url-input");
         const pasteBtn = document.getElementById("paste-btn");
+
+        if (urlInput) {
+            urlInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    void sendPayload();
+                }
+            });
+        }
 
         if (pasteBtn) {
             pasteBtn.addEventListener("click", async () => {
@@ -1085,13 +1101,13 @@
                     const text = await navigator.clipboard.readText();
                     if (text) {
                         urlInput.value = text;
-                        showMessage(remoteLang === "de" ? "Link eingefügt!" : "Link pasted!", false);
+                        showMessage(t("pasted_ok"), false);
                     } else {
-                        showMessage(remoteLang === "de" ? "Zwischenablage ist leer." : "Clipboard is empty.", true);
+                        showMessage(t("clipboard_empty"), true);
                     }
                 } catch (err) {
                     // Fallback for browsers that block clipboard API
-                    showMessage(remoteLang === "de" ? "Bitte manuell gedrückt halten & einfügen" : "Please tap and hold to paste manually", true);
+                    showMessage(t("paste_manual_hint"), true);
                 }
             });
         }
@@ -1137,7 +1153,11 @@
                 delete_confirm: "Möchtest du \"{file}\" wirklich endgültig löschen?",
                 queue_loading: "Lade Sammelkorb...",
                 queue_empty: "Sammelkorb ist leer.",
-                eta: "ETA"
+                eta: "ETA",
+                pasted_ok: "Link eingefügt!",
+                clipboard_empty: "Zwischenablage ist leer.",
+                paste_manual_hint: "Bitte manuell gedrückt halten & einfügen",
+                play_error: "Wiedergabe fehlgeschlagen."
             },
             en: {
                 app_title: "SoundSync Remote",
@@ -1168,7 +1188,11 @@
                 delete_confirm: "Do you really want to permanently delete \"{file}\"?",
                 queue_loading: "Loading queue...",
                 queue_empty: "Queue is empty.",
-                eta: "ETA"
+                eta: "ETA",
+                pasted_ok: "Link pasted!",
+                clipboard_empty: "Clipboard is empty.",
+                paste_manual_hint: "Please tap and hold to paste manually",
+                play_error: "Playback failed."
             },
             pl: {
                 app_title: "SoundSync Remote",
@@ -1199,7 +1223,11 @@
                 delete_confirm: "Czy na pewno trwale usunąć \"{file}\"?",
                 queue_loading: "Ładowanie koszyka...",
                 queue_empty: "Koszyk jest pusty.",
-                eta: "ETA"
+                eta: "ETA",
+                pasted_ok: "Wklejono link!",
+                clipboard_empty: "Schowek jest pusty.",
+                paste_manual_hint: "Przytrzymaj pole, aby wkleić ręcznie",
+                play_error: "Odtwarzanie nie powiodło się."
             }
         };
         let remoteLang = "de";
@@ -1228,6 +1256,7 @@
         }
 
         async function syncRemoteLanguage() {
+            if (document.hidden) return;
             try {
                 const res = await authFetch("/remote-config");
                 if (!res.ok) return;
@@ -1237,7 +1266,9 @@
                     remoteLang = nextLang;
                     remoteT = remoteTranslations[remoteLang];
                     applyRemoteTranslations();
-                    renderFileList(globalFilesList);
+                    filterFiles(fileSearch ? fileSearch.value : "");
+                    lastQueueSignature = "";
+                    void loadQueue();
                 }
             } catch (e) {}
         }
@@ -1262,10 +1293,12 @@
         }
 
         // Send URL to desktop backend
+        let messageTimer = null;
         function showMessage(text, isError = false) {
+            if (messageTimer) clearTimeout(messageTimer);
             statusMsg.textContent = text;
             statusMsg.className = "status-msg " + (isError ? "error" : "success");
-            setTimeout(() => { statusMsg.textContent = ""; }, 4000);
+            messageTimer = setTimeout(() => { statusMsg.textContent = ""; messageTimer = null; }, 4000);
         }
 
         async function sendPayload() {
@@ -1294,8 +1327,7 @@
                 if (response.ok) {
                     urlInput.value = "";
                     showMessage(t("send_success"));
-                    // Fetch files list update
-                    loadFiles();
+                    setTimeout(() => { void loadQueue(); void loadFiles(); }, 400);
                 } else {
                     showMessage(t("send_server_error"), true);
                 }
@@ -1308,6 +1340,7 @@
 
         // Status Poller
         async function pollStatus() {
+            if (document.hidden) return;
             try {
                 const res = await authFetch("/status");
                 if (!res.ok) return;
@@ -1317,15 +1350,16 @@
                     progressCard.classList.add("active");
                     
                     dlTitle.textContent = data.title || t("downloading");
-                    dlBar.style.width = data.percent + "%";
-                    dlPercent.textContent = data.percent.toFixed(1) + "%";
+                    const pct = Math.max(0, Math.min(100, Number(data.percent) || 0));
+                    dlBar.style.width = pct + "%";
+                    dlPercent.textContent = pct.toFixed(1) + "%";
                     
                     if (data.status === "converting") {
                         dlBadge.textContent = t("converting_badge");
                         dlEtaSpeed.textContent = t("extracting_audio");
                     } else {
                         dlBadge.textContent = t("download_badge");
-                        dlEtaSpeed.textContent = `${data.speed} • ${t("eta")} ${data.eta}`;
+                        dlEtaSpeed.textContent = `${data.speed || "--"} • ${t("eta")} ${data.eta || "--"}`;
                     }
                 } else {
                     progressCard.classList.remove("active");
@@ -1337,6 +1371,8 @@
 
         // LIBRARY SYSTEM & AUDIO STREAMER
         let globalFilesList = [];
+        let lastFilesSignature = "";
+        let lastQueueSignature = "";
         const fileList = document.getElementById("file-list");
         const remoteQueueList = document.getElementById("remote-queue-list");
         const fileSearch = document.getElementById("file-search");
@@ -1351,16 +1387,21 @@
         const playerProgress = document.getElementById("player-progress");
         const playerPlayBtn = document.getElementById("player-play-btn");
         const playerVolumeSlider = document.getElementById("player-volume-slider");
-        const volumeIcon = document.getElementById("volume-icon");
+        const volumeIconWrap = document.getElementById("volume-icon-wrap");
 
         let currentFilePlaying = "";
 
         async function loadQueue() {
+            if (document.hidden) return;
             try {
                 const res = await authFetch("/queue");
                 if (!res.ok) return;
                 const queue = await res.json();
-                renderQueue(queue);
+                const sig = JSON.stringify(queue);
+                if (sig !== lastQueueSignature) {
+                    lastQueueSignature = sig;
+                    renderQueue(queue);
+                }
             } catch (e) {}
         }
 
@@ -1373,7 +1414,7 @@
                         <i data-lucide="list-music" style="width: 24px; height: 24px; margin-bottom: 8px; stroke-width: 1.5; color: rgba(255,255,255,0.15)"></i>
                         <p style="margin:0;">${t("queue_empty")}</p>
                     </div>`;
-                lucide.createIcons();
+                refreshIcons();
                 return;
             }
             queue.slice(0, 20).forEach(item => {
@@ -1391,7 +1432,7 @@
                 `;
                 remoteQueueList.appendChild(card);
             });
-            lucide.createIcons();
+            refreshIcons();
         }
 
         function escapeHtml(value) {
@@ -1403,20 +1444,26 @@
                 .replace(/'/g, "&#039;");
         }
 
-        async function loadFiles() {
+        async function loadFiles(force = false) {
+            if (document.hidden && !force) return;
             try {
                 const res = await authFetch("/files");
                 if (!res.ok) return;
                 const files = await res.json();
-                globalFilesList = files;
-                renderFileList(files);
+                const sig = JSON.stringify(files);
+                if (force || sig !== lastFilesSignature) {
+                    lastFilesSignature = sig;
+                    globalFilesList = files;
+                    filterFiles(fileSearch ? fileSearch.value : "");
+                }
             } catch (e) {}
         }
 
         function filterFiles(query) {
-            const filtered = globalFilesList.filter(file => 
-                file.toLowerCase().includes(query.toLowerCase())
-            );
+            const q = String(query || "").trim().toLowerCase();
+            const filtered = q
+                ? globalFilesList.filter(file => file.toLowerCase().includes(q))
+                : globalFilesList;
             renderFileList(filtered);
         }
 
@@ -1429,7 +1476,7 @@
                         <i data-lucide="folder-open" style="width: 24px; height: 24px; margin-bottom: 8px; stroke-width: 1.5; color: rgba(255,255,255,0.15)"></i>
                         <p style="margin:0;">${t("no_files")}</p>
                     </div>`;
-                lucide.createIcons();
+                refreshIcons();
                 return;
             }
             
@@ -1476,10 +1523,11 @@
                             if (res.ok) {
                                 if (currentFilePlaying === file) {
                                     audioPlayer.pause();
+                                    audioPlayer.removeAttribute("src");
                                     customPlayer.classList.remove("active");
                                     currentFilePlaying = "";
                                 }
-                                loadFiles();
+                                void loadFiles(true);
                             }
                         } catch (e) {}
                     }
@@ -1493,7 +1541,7 @@
                 fileList.appendChild(card);
             });
             
-            lucide.createIcons();
+            refreshIcons();
         }
 
         // Player Actions
@@ -1506,56 +1554,70 @@
             playerArt.classList.add("playing");
 
             audioPlayer.src = authUrl("/download/" + encodeURIComponent(filename));
-            audioPlayer.play();
-            
-            updatePlayBtnIcon(true);
-            renderFileList(globalFilesList); // Re-render for list highlight
+            audioPlayer.play().then(() => {
+                updatePlayBtnIcon(true);
+                filterFiles(fileSearch ? fileSearch.value : "");
+            }).catch(() => {
+                playerArt.classList.remove("playing");
+                updatePlayBtnIcon(false);
+                showMessage(t("play_error"), true);
+                filterFiles(fileSearch ? fileSearch.value : "");
+            });
         }
 
         function toggleAudioPlay() {
             if (!audioPlayer.src) return;
             
             if (audioPlayer.paused) {
-                audioPlayer.play();
-                playerArt.classList.add("playing");
-                updatePlayBtnIcon(true);
+                audioPlayer.play().then(() => {
+                    playerArt.classList.add("playing");
+                    updatePlayBtnIcon(true);
+                    filterFiles(fileSearch ? fileSearch.value : "");
+                }).catch(() => {
+                    playerArt.classList.remove("playing");
+                    updatePlayBtnIcon(false);
+                    showMessage(t("play_error"), true);
+                });
             } else {
                 audioPlayer.pause();
                 playerArt.classList.remove("playing");
                 updatePlayBtnIcon(false);
+                filterFiles(fileSearch ? fileSearch.value : "");
             }
-            renderFileList(globalFilesList); // Update play buttons in list
         }
 
         function updatePlayBtnIcon(isPlaying) {
             playerPlayBtn.innerHTML = `<i data-lucide="${isPlaying ? 'pause' : 'play'}"></i>`;
-            lucide.createIcons();
+            refreshIcons();
         }
 
         function skipAudio(seconds) {
-            if (!audioPlayer.src) return;
+            if (!audioPlayer.src || !Number.isFinite(audioPlayer.duration)) return;
             audioPlayer.currentTime = Math.max(0, Math.min(audioPlayer.duration, audioPlayer.currentTime + seconds));
         }
 
         function seekAudio(value) {
-            if (!audioPlayer.src || !audioPlayer.duration) return;
+            if (!audioPlayer.src || !Number.isFinite(audioPlayer.duration) || audioPlayer.duration <= 0) return;
             const targetTime = (value / 100) * audioPlayer.duration;
             audioPlayer.currentTime = targetTime;
         }
 
         function setAudioVolume(val) {
-            audioPlayer.volume = val;
-            // Update Icon
-            if (val == 0) volumeIcon.setAttribute("data-lucide", "volume-x");
-            else if (val < 0.4) volumeIcon.setAttribute("data-lucide", "volume");
-            else if (val < 0.7) volumeIcon.setAttribute("data-lucide", "volume-1");
-            else volumeIcon.setAttribute("data-lucide", "volume-2");
-            lucide.createIcons();
+            const num = Math.max(0, Math.min(1, Number(val)));
+            audioPlayer.volume = num;
+            if (volumeIconWrap) {
+                let iconName = "volume-2";
+                if (num === 0) iconName = "volume-x";
+                else if (num < 0.4) iconName = "volume";
+                else if (num < 0.7) iconName = "volume-1";
+                volumeIconWrap.innerHTML = `<i data-lucide="${iconName}"></i>`;
+                refreshIcons();
+            }
         }
 
         // Format helper time
         function formatPlayerTime(seconds) {
-            if (isNaN(seconds)) return "0:00";
+            if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
             const mins = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60);
             return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
@@ -1563,7 +1625,7 @@
 
         // Audio Events
         audioPlayer.addEventListener("timeupdate", () => {
-            if (!audioPlayer.duration) return;
+            if (!Number.isFinite(audioPlayer.duration) || audioPlayer.duration <= 0) return;
             const current = audioPlayer.currentTime;
             const duration = audioPlayer.duration;
             
@@ -1581,18 +1643,27 @@
         audioPlayer.addEventListener("ended", () => {
             playerArt.classList.remove("playing");
             updatePlayBtnIcon(false);
-            renderFileList(globalFilesList);
+            filterFiles(fileSearch ? fileSearch.value : "");
+        });
+
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden) {
+                void pollStatus();
+                void loadQueue();
+                void loadFiles();
+                void syncRemoteLanguage();
+            }
         });
 
         applyRemoteTranslations();
-        syncRemoteLanguage();
-        setInterval(syncRemoteLanguage, 3000);
+        void syncRemoteLanguage();
+        setInterval(syncRemoteLanguage, 5000);
 
         // Initialize Files Polls
-        loadQueue();
+        void loadQueue();
         setInterval(loadQueue, 3000);
-        loadFiles();
-        setInterval(loadFiles, 5000);
+        void loadFiles(true);
+        setInterval(() => { void loadFiles(false); }, 5000);
     </script>
 </body>
 </html>
